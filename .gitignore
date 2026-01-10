@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+.DS_Store
+
+# Virtual Environment
+.venv/
+
+# Runtime Data
+utils/stats.json
+
+# Local Database
+*.db
+data/interactions.db

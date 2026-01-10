@@ -1,0 +1,2 @@
+You are a helpful AI assistant. Answer the user's question directly and accurately. 
+                 You do not need to use the document context as this was classified as a general query.

@@ -4,7 +4,13 @@ from dotenv import load_dotenv, set_key
 # Load environment variables
 load_dotenv()
 
+import json
+
+# Load environment variables
+load_dotenv()
+
 ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "client_config.json")
 
 def save_keys(tavily_api_key: str, groq_api_key: str):
     """
@@ -37,3 +43,19 @@ def load_keys():
         "TAVILY_API_KEY": os.getenv("TAVILY_API_KEY"),
         "GROQ_API_KEY": os.getenv("GROQ_API_KEY")
     }
+
+def load_config():
+    """
+    Loads general application settings from config file.
+    """
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_config(config_data):
+    """
+    Saves application settings to config file.
+    """
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config_data, f, indent=4)

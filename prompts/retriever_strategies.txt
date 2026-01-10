@@ -1,3 +1,4 @@
 1. '{direct_llm}': Use this for general knowledge, greetings, coding questions, logic puzzles, or topics not requiring specific document context (e.g., "Write a python script", "Who is the president of USA?", "Hi there").
-2. '{vector_based}': Use this when the query explicitly asks about "documents", "files", or specific concepts likely found in the user's uploaded knowledge base (e.g., "What does the pdf say about retrievers?", "Summarize the excel sheet", "Explain vector retrievers from the text").
+2. '{vector_based}': Use this when the query asks about "documents", "files", "this", "summarize this", or content implied to be in the uploaded knowledge base.
 3. '{hybrid}': Use this for complex queries needing both specific document facts AND general knowledge.
+4. '{web_search}': Use this for queries about recent events (post-2023), live data (stock prices, weather), or specific websites/URLs (e.g. "Search reddit for...", "Summarize techcrunch.com").

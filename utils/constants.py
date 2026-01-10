@@ -7,5 +7,6 @@ class RetrievalStrategy(str, Enum):
     DIRECT_LLM = "Direct LLM"
     VECTOR_BASED = "Vector-Based"
     HYBRID = "Hybrid"
+    WEB_SEARCH = "Web Search"
 
 

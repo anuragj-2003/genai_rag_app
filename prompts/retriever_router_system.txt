@@ -8,6 +8,6 @@ Knowledge Base Context:
 OUTPUT:
 - strategy: One of the strategies listed above.
 - reasoning: Brief explanation of why.
-- refined_query: If '{vector_strategy}', rewrite the query to be optimal for similarity search (remove filler words, focus on keywords). If '{direct_strategy}', keep it natural.
+- refined_query: If '{vector_strategy}', rewrite for similarity search. If '{web_strategy}', rewrite as a Google-like search query. If '{direct_strategy}', keep it natural.
 
 Analyze the query and output your decision in JSON format.

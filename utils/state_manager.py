@@ -3,7 +3,7 @@ import os
 import json
 from dotenv import load_dotenv
 from .database import setup_database, load_query_history_from_db, load_chat_history_from_db
-from .config_utils import load_keys
+from .config_utils import load_keys, load_config
 from .vector_store_manager import VectorStoreManager
 
 STATS_FILE = os.path.join(os.path.dirname(__file__), "stats.json")
@@ -73,10 +73,16 @@ def init_state():
         # Load query history from the database
         st.session_state.setdefault("query_history", load_query_history_from_db())
 
-        st.session_state.setdefault("settings", {
-            "tavily_depth": 5, "temperature": 0.5,
-            "groq_model": "llama-3.3-70b-versatile"
-        })
+        # Load settings from config file or use defaults
+        saved_settings = load_config()
+        default_settings = {
+            "tavily_depth": 5, 
+            "temperature": 0.5,
+            "groq_model": "llama-3.3-70b-versatile",
+            "search_count": 5
+        }
+        # Merge saved into defaults (saved takes precedence)
+        st.session_state.setdefault("settings", {**default_settings, **saved_settings})
         st.session_state.setdefault("chat_messages", load_chat_history_from_db())
         
         # Initialize Vector Store Manager

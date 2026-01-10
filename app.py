@@ -25,7 +25,7 @@ init_state()
 
 # Check Native Google Auth first
 # Note: accessing st.user might require newer streamlit, ensuring graceful fallback or direct usage
-if hasattr(st, "user") and st.user.email:
+if hasattr(st, "user") and getattr(st.user, "email", None):
     # Sync Native Auth to Session State
     if not st.session_state.get("authenticated"):
         email = st.user.email
@@ -111,6 +111,14 @@ with st.sidebar:
     
     st.markdown("---")
     st.caption(f"Logged in as: {st.session_state.user_email}")
+
+    # Global Sidebar Actions
+    if selected_page == "Agent Chat":
+        if st.session_state.get("chat_messages"): # Only show if history exists
+            st.markdown("---")
+            if st.button("🗑️ Clear Chat History", use_container_width=True, type="secondary"):
+                st.session_state.chat_messages = []
+                st.rerun()
 
 # Routing
 if selected_page == "Dashboard":

@@ -31,11 +31,29 @@ def save_stats():
 def init_state():
     if "app_started" not in st.session_state:
         setup_database()
-        load_dotenv()
         
-        # Keys are loaded into env by load_dotenv(), just access them
-        st.session_state.TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-        st.session_state.GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+        # 1. Try loading from .env explicitly (force reload to pick up changes)
+        env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+        load_dotenv(env_path, override=True)
+        
+        # 2. Try getting keys from multiple sources (Session > Secrets > Env)
+        # We check st.secrets first (Streamlit native), then os.environ
+        
+        def get_secret(key):
+            try:
+                if key in st.secrets:
+                    return st.secrets[key]
+            except FileNotFoundError:
+                pass # No secrets file found, fall back to env
+            except Exception:
+                pass 
+            return os.getenv(key)
+
+        tavily = get_secret("TAVILY_API_KEY")
+        if tavily: st.session_state.TAVILY_API_KEY = tavily.strip()
+        
+        groq = get_secret("GROQ_API_KEY")
+        if groq: st.session_state.GROQ_API_KEY = groq.strip()
         
         stats = load_stats()
         st.session_state.setdefault("search_count", stats.get("search_count", 0))

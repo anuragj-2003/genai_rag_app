@@ -2,8 +2,7 @@ import streamlit as st
 from streamlit_option_menu import option_menu # Import the component
 from utils.state_manager import init_state
 from views.dashboard_page import render_page as render_dashboard
-from views.custom_search_page import render_page as render_custom_search
-from views.llm_search_page import render_page as render_llm_search
+from views.chat_page import render_page as render_chat
 from views.settings_page import render_page as render_settings
 
 # Set page configuration
@@ -16,8 +15,7 @@ st.set_page_config(
 # Initialize session state
 init_state()
 
-#  API Key Verification & Setup 
-# This ensures the app doesn't crash if deployed without secrets
+# API Key Verification & Setup
 if not st.session_state.get("GROQ_API_KEY") or not st.session_state.get("TAVILY_API_KEY"):
     st.title("⚙️ Setup Required")
     st.warning("API Keys are missing. Please provide them below to continue.")
@@ -37,8 +35,7 @@ if not st.session_state.get("GROQ_API_KEY") or not st.session_state.get("TAVILY_
     
     st.stop() # Stop execution here until keys are provided
 
-#  Navigation Logic 
-# Determine default index based on potential page switch
+# Navigation Logic
 default_index = 0
 options = ["Dashboard", "Custom Search", "RAG Agent", "Settings"]
 
@@ -54,42 +51,36 @@ with st.sidebar:
     st.header("GenAI Workspace")
     
     # Main Navigation Menu
-    page = option_menu(
-        menu_title=None,
-        options=options,
-        icons=["speedometer2", "search", "robot", "sliders"],
+    selected_page = option_menu(
+        "Menu",
+        ["Dashboard", "Chat", "Settings"],
+        icons=['speedometer2', 'chat-dots', 'gear'],
         menu_icon="cast",
         default_index=default_index,
-        styles={
-            "container": {"padding": "0!important", "background-color": "transparent"},
-            "icon": {"color": "#a0a0a0", "font-size": "18px"}, 
-            "nav-link": {
-                "font-size": "15px", "text-align": "left", "margin":"0px", "color": "#a0a0a0",
-                "--hover-color": "#3c4043"
-            },
-            "nav-link-selected": {"background-color": "#2c2f33", "color": "#ffffff"},
-        }
     )
     
     st.divider()
+    
+    # Global Sidebar Actions
+    if selected_page == "Chat":
+        if st.session_state.chat_messages: # Only show if history exists
+            if st.sidebar.button("🗑️ Clear Chat History", width="stretch"):
+                st.session_state.chat_messages = []
+                st.rerun()
 
-    # Conditionally display LLM settings
-    if page == "RAG Agent":
-        st.header("LLM Settings")
-        
-        st.session_state.llm_provider = "Groq"
-        st.success("Using Groq")
 
-        if st.button("Clear Chat History", width="stretch"):
-            st.session_state.chat_messages = []
-            st.rerun()
-
-if page == "Dashboard":
+if "switch_page" in st.session_state:
+    target_page = st.session_state.switch_page
+    st.session_state.max_nav_page = target_page # Helper to track current page if needed
+    # We need to rerun to reflect the change visually in the sidebar if we could control it, 
+    # but option_menu is reactive. We just render the target page content.
+    # Ideally, we synced default_index above.
+    del st.session_state.switch_page
+    
+# Render selected page
+if selected_page == "Dashboard":
     render_dashboard()
-elif page == "Custom Search":
-    render_custom_search()
-elif page == "RAG Agent":
-    render_llm_search()
-elif page == "Settings":
+elif selected_page == "Chat":
+    render_chat()
+elif selected_page == "Settings":
     render_settings()
-

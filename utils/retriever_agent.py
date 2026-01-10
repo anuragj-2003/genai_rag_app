@@ -33,6 +33,20 @@ def get_retriever_decision(user_query, api_key, model_name="llama3-8b-8192"):
         "refined_query": user_query
     }
 
+    # 0. Regex Check for URLs
+    import re
+    # Pattern to find URLs
+    url_pattern = r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+'
+    urls = re.findall(url_pattern, user_query)
+    
+    if urls:
+        return {
+            "strategy": RetrievalStrategy.WEB_SEARCH.value,
+            "reasoning": f"User query contains specific URLs: {urls}. Switching to Web Search.",
+            "refined_query": user_query,
+            "urls": urls # Pass extracted URLs
+        }
+
     if not api_key:
         fallback_decision["reasoning"] = "No API key provided."
         return fallback_decision
@@ -47,7 +61,8 @@ def get_retriever_decision(user_query, api_key, model_name="llama3-8b-8192"):
         strategies_text = strategies_template.format(
             direct_llm=RetrievalStrategy.DIRECT_LLM.value,
             vector_based=RetrievalStrategy.VECTOR_BASED.value,
-            hybrid=RetrievalStrategy.HYBRID.value
+            hybrid=RetrievalStrategy.HYBRID.value,
+            web_search=RetrievalStrategy.WEB_SEARCH.value
         )
         
         router_system_template = load_prompt("retriever_router_system.txt")
@@ -71,6 +86,7 @@ def get_retriever_decision(user_query, api_key, model_name="llama3-8b-8192"):
                     "knowledge_base": retriever_knowledge_base,
                     "vector_strategy": RetrievalStrategy.VECTOR_BASED.value,
                     "direct_strategy": RetrievalStrategy.DIRECT_LLM.value,
+                    "web_strategy": RetrievalStrategy.WEB_SEARCH.value,
                     "query": user_query,
                     "format_instructions": parser.get_format_instructions()
                 })

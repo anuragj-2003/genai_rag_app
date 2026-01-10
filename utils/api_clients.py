@@ -20,7 +20,7 @@ def run_tavily_search(query: str, search_depth: str = "advanced", result_count: 
         return "Error: Tavily API key not set.", []
     
 
-    # Retry logic
+
     max_retries = 3
     last_error = None
     
@@ -35,7 +35,7 @@ def run_tavily_search(query: str, search_depth: str = "advanced", result_count: 
             
             response = client.search(**params)
             
-            # Simplified loop instead of list comprehension
+
             results_content = []
             results_list = response.get("results", [])
             

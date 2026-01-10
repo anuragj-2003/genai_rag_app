@@ -25,7 +25,7 @@ init_state()
 
 # Check Native Google Auth first
 # Note: accessing st.user might require newer streamlit, ensuring graceful fallback or direct usage
-if hasattr(st, "user") and st.user.is_logged_in:
+if hasattr(st, "user") and st.user.email:
     # Sync Native Auth to Session State
     if not st.session_state.get("authenticated"):
         email = st.user.email

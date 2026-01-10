@@ -16,6 +16,27 @@ st.set_page_config(
 # Initialize session state
 init_state()
 
+#  API Key Verification & Setup 
+# This ensures the app doesn't crash if deployed without secrets
+if not st.session_state.get("GROQ_API_KEY") or not st.session_state.get("TAVILY_API_KEY"):
+    st.title("⚙️ Setup Required")
+    st.warning("API Keys are missing. Please provide them below to continue.")
+    
+    with st.form("api_key_form"):
+        groq_key = st.text_input("Groq API Key", type="password", help="Get it from console.groq.com")
+        tavily_key = st.text_input("Tavily API Key", type="password", help="Get it from tavily.com")
+        
+        if st.form_submit_button("Save & Continue", width="stretch"):
+            if groq_key and tavily_key:
+                st.session_state["GROQ_API_KEY"] = groq_key
+                st.session_state["TAVILY_API_KEY"] = tavily_key
+                st.success("Keys saved! Reloading...")
+                st.rerun()
+            else:
+                st.error("Both keys are required.")
+    
+    st.stop() # Stop execution here until keys are provided
+
 #  Navigation Logic 
 # Determine default index based on potential page switch
 default_index = 0
@@ -63,7 +84,6 @@ with st.sidebar:
             st.session_state.chat_messages = []
             st.rerun()
 
-#  Page Rendering Logic (remains the same) 
 if page == "Dashboard":
     render_dashboard()
 elif page == "Custom Search":

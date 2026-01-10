@@ -63,3 +63,21 @@ streamlit run app.py
 -   **LLM Integration**: Groq
 -   **Search**: Tavily Search API
 -   **Database**: SQLite
+
+## Deployment
+
+### Handling Secrets
+
+When deploying to platforms like Streamlit Cloud, the `.env` file is not uploaded. You must set your secrets in the platform's dashboard.
+
+**Streamlit Cloud:**
+1.  Go to your app dashboard.
+2.  Click "Edit" -> "Settings" -> "Secrets".
+3.  Paste your keys in TOML format:
+    ```toml
+    GROQ_API_KEY = "your_key_here"
+    TAVILY_API_KEY = "your_key_here"
+    ```
+
+**Fallback:**
+If secrets are not configured, the app will automatically show a "Setup Required" screen where you can enter your API keys securely for the session.

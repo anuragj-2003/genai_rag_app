@@ -4,6 +4,7 @@ import json
 from dotenv import load_dotenv
 from .database import setup_database, load_query_history_from_db, load_chat_history_from_db
 from .config_utils import load_keys
+from .vector_store_manager import VectorStoreManager
 
 STATS_FILE = os.path.join(os.path.dirname(__file__), "stats.json")
 
@@ -59,4 +60,9 @@ def init_state():
             "groq_model": "llama-3.3-70b-versatile"
         })
         st.session_state.setdefault("chat_messages", load_chat_history_from_db())
+        
+        # Initialize Vector Store Manager
+        if "vector_store_manager" not in st.session_state:
+             st.session_state.vector_store_manager = VectorStoreManager()
+             
         st.session_state.app_started = True

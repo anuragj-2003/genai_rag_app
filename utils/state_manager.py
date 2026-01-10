@@ -40,8 +40,13 @@ def init_state():
         # We check st.secrets first (Streamlit native), then os.environ
         
         def get_secret(key):
-            if key in st.secrets:
-                return st.secrets[key]
+            try:
+                if key in st.secrets:
+                    return st.secrets[key]
+            except FileNotFoundError:
+                pass # No secrets file found, fall back to env
+            except Exception:
+                pass 
             return os.getenv(key)
 
         st.session_state.TAVILY_API_KEY = get_secret("TAVILY_API_KEY")

@@ -27,7 +27,7 @@ def render_page():
         with col2:
             result_count = st.selectbox("Number of Results", options=list(range(1, 11)), index=6)
             
-        if st.form_submit_button("Search", use_container_width=True):
+        if st.form_submit_button("Search", width="stretch"):
             if query:
                 depth_str = "advanced" if depth >= 3 else "basic"
                 with st.spinner(f"Searching for '{query}'..."):

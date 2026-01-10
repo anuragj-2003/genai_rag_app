@@ -1,10 +1,10 @@
 import streamlit as st
 from streamlit_option_menu import option_menu # Import the component
 from utils.state_manager import init_state
-from pages.dashboard_page import render_page as render_dashboard
-from pages.custom_search_page import render_page as render_custom_search
-from pages.llm_search_page import render_page as render_llm_search
-from pages.settings_page import render_page as render_settings
+from views.dashboard_page import render_page as render_dashboard
+from views.custom_search_page import render_page as render_custom_search
+from views.llm_search_page import render_page as render_llm_search
+from views.settings_page import render_page as render_settings
 
 # Set page configuration
 st.set_page_config(
@@ -57,9 +57,9 @@ with st.sidebar:
         st.header("LLM Settings")
         
         st.session_state.llm_provider = "Groq"
-        st.success("Using Groq (Web-based)")
+        st.success("Using Groq")
 
-        if st.button("Clear Chat History", use_container_width=True):
+        if st.button("Clear Chat History", width="stretch"):
             st.session_state.chat_messages = []
             st.rerun()
 

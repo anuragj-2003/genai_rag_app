@@ -92,7 +92,7 @@ def render_page():
                         x=alt.X('Provider', axis=alt.Axis(labelAngle=0)), 
                         y='Count',
                         tooltip=['Provider', 'Count']
-                    ), use_container_width=True)
+                    ), width="stretch")
                 else:
                     st.info("No LLM calls yet.")
                     
@@ -105,7 +105,7 @@ def render_page():
                         theta="Count", 
                         color=alt.Color("Type", scale=alt.Scale(scheme='accent')),
                         tooltip=['Type', 'Count']
-                    ), use_container_width=True)
+                    ), width="stretch")
                 else:
                     st.info("No data yet.")
 

@@ -37,7 +37,7 @@ def render_page():
         selected_temp = st.slider("LLM Temperature", min_value=0.0, max_value=1.0, value=st.session_state.settings.get("temperature", 0.5), step=0.05)
         selected_depth = st.selectbox("Default Search Depth (1-2: Basic, 3-5: Adv)", options=[1, 2, 3, 4, 5], index=st.session_state.settings.get("tavily_depth", 5) - 1)
         
-        if st.form_submit_button("Save All Settings", use_container_width=True):
+        if st.form_submit_button("Save All Settings", width="stretch"):
             st.session_state.settings["groq_model"] = selected_groq
             st.session_state.settings["temperature"] = selected_temp
             st.session_state.settings["tavily_depth"] = selected_depth

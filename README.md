@@ -52,7 +52,7 @@ streamlit run app.py
 ## Project Structure
 
 -   `app.py`: Main entry point of the application.
--   `pages/`: Contains the individual pages (Dashboard, Search, RAG Agent, Settings).
+-   `views/`: Contains the individual pages (Dashboard, Search, RAG Agent, Settings).
 -   `utils/`: Helper functions for database, state management, and API clients.
 -   `data/`: Stores local interaction history (sqlite database).
 -   `prompts/`: System prompts for the AI agent.

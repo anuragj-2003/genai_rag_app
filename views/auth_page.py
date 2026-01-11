@@ -38,6 +38,7 @@ def inject_custom_css():
 def signup_dialog():
     st.caption("It's quick and easy.")
     with st.form("signup_modal_form"):
+        new_name = st.text_input("Full Name")
         new_email = st.text_input("Email")
         new_password = st.text_input("New Password", type="password")
         confirm_password = st.text_input("Confirm Password", type="password")
@@ -45,7 +46,9 @@ def signup_dialog():
         # Submit
         submitted = st.form_submit_button("Sign Up", type="primary", use_container_width=True)
         if submitted:
-            if new_password != confirm_password:
+            if not new_name.strip():
+                 st.error("Please enter your name.")
+            elif new_password != confirm_password:
                 st.error("Passwords do not match")
             elif len(new_password) < 6:
                     st.error("Password must be at least 6 characters")
@@ -61,7 +64,7 @@ def signup_dialog():
                         "email": new_email, 
                         "code": otp_code, 
                         "type": "signup",
-                        "data": {"password": new_password}
+                        "data": {"password": new_password, "full_name": new_name}
                     }
                     st.rerun()
                 else:
@@ -107,7 +110,7 @@ def render_page():
                 if otp_input == st.session_state.otp_context["code"]:
                     ctx = st.session_state.otp_context
                     if ctx["type"] == "signup":
-                         register_user(ctx["email"], ctx["data"]["password"])
+                         register_user(ctx["email"], ctx["data"]["password"], full_name=ctx["data"].get("full_name"))
                          st.success("Account Created! Please Login.")
                          st.session_state.otp_context["active"] = False
                          time.sleep(1)

@@ -31,17 +31,29 @@ def save_keys(tavily_api_key: str, groq_api_key: str):
     # Reload environment to apply changes immediately
     load_dotenv(ENV_FILE, override=True)
 
+import streamlit as st
+
+def get_env_var(key: str):
+    """
+    Helper to get an environment variable, prioritizing Streamlit secrets.
+    """
+    # 1. Try Streamlit Secrets (for Cloud Deployment)
+    if hasattr(st, "secrets") and key in st.secrets:
+        return st.secrets[key]
+    
+    # 2. Try OS Environment (for Local .env)
+    return os.getenv(key)
+
 def load_keys():
     """
-    Loads API keys from environment variables.
+    Loads API keys from Streamlit secrets or environment variables.
     
     Output:
         dict: Dictionary containing API keys.
     """
-    # Simply return values from os.environ as load_dotenv is called on import/init
     return {
-        "TAVILY_API_KEY": os.getenv("TAVILY_API_KEY"),
-        "GROQ_API_KEY": os.getenv("GROQ_API_KEY")
+        "TAVILY_API_KEY": get_env_var("TAVILY_API_KEY"),
+        "GROQ_API_KEY": get_env_var("GROQ_API_KEY")
     }
 
 def load_config():

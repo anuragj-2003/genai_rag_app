@@ -7,6 +7,7 @@ from views.settings_page import render_page as render_settings
 from views.account_page import render_page as render_account
 from views.auth_page import render_page as render_auth
 from utils.auth_manager import init_db
+from utils.database import get_conversations, create_conversation, delete_conversation, rename_conversation
 
 # Initialize User Database
 init_db()
@@ -27,7 +28,8 @@ init_state()
 # Note: accessing st.user might require newer streamlit, ensuring graceful fallback or direct usage
 if hasattr(st, "user") and getattr(st.user, "email", None):
     # Sync Native Auth to Session State
-    if not st.session_state.get("authenticated"):
+    # Only if not authenticated AND not explicitly logged out
+    if not st.session_state.get("authenticated") and not st.session_state.get("logged_out"):
         email = st.user.email
         # Register/Update in DB
         from utils.auth_manager import login_google_user
@@ -44,9 +46,32 @@ if not st.session_state.get("authenticated"):
     st.stop()
 
 # Post-Auth: Force Password Setup for Google Users (if missing)
-from utils.auth_manager import has_password, update_password
+from utils.auth_manager import has_password, update_password, get_user_name, update_user_name
 user_email = st.session_state.get("user_email")
 
+# 1. Check Name (Onboarding)
+current_name = get_user_name(user_email)
+st.session_state["user_full_name"] = current_name # Sync to session
+
+if not current_name:
+    st.title("👋 Welcome!")
+    st.info("Let's get to know you. What should we call you?")
+    
+    with st.form("set_name_form"):
+        name_in = st.text_input("Full Name", placeholder="John Doe")
+        if st.form_submit_button("Continue"):
+            if name_in.strip():
+                if update_user_name(user_email, name_in.strip()):
+                    st.success("Nice to meet you!")
+                    st.session_state["user_full_name"] = name_in.strip()
+                    st.rerun()
+                else:
+                    st.error("Failed to save name.")
+            else:
+                st.error("Please enter a name.")
+    st.stop() # Stop until name is set
+
+# 2. Check Password (Security) for Google Users
 if not has_password(user_email):
     st.title("🔐 Setup Password")
     st.info("Since you logged in with Google, please set a backup password for your account.")
@@ -66,66 +91,90 @@ if not has_password(user_email):
                 st.error("Passwords must match and be 6+ chars.")
     st.stop() # Stop here until password is set
 
-# API Key Verification & Setup
-if not st.session_state.get("GROQ_API_KEY") or not st.session_state.get("TAVILY_API_KEY"):
-    st.title("⚙️ Setup Required")
-    st.warning("API Keys are missing. Please provide them below to continue.")
-    
-    with st.form("api_key_form"):
-        groq_key = st.text_input("Groq API Key", type="password", help="Get it from console.groq.com")
-        tavily_key = st.text_input("Tavily API Key", type="password", help="Get it from tavily.com")
-        
-        if st.form_submit_button("Save & Continue", width="stretch"):
-            if groq_key and tavily_key:
-                st.session_state["GROQ_API_KEY"] = groq_key
-                st.session_state["TAVILY_API_KEY"] = tavily_key
-                st.success("Keys saved! Reloading...")
-                st.rerun()
-            else:
-                st.error("Both keys are required.")
-    
-    st.stop() # Stop execution here until keys are provided
+# Start fresh if explicit login just happened
+if st.session_state.get("auth_mode") == "google_native" and "joined" not in st.session_state:
+    st.session_state.joined = True
+    # Auto-load the last conversation for this user
+    user_convs = get_conversations(st.session_state.user_email)
+    if user_convs:
+        st.session_state.current_conversation_id = user_convs[0]["id"]
+    else:
+        st.session_state.current_conversation_id = None
 
 # Navigation Logic
-default_index = 0
-options = ["Dashboard", "Agent Chat", "Settings", "Account"]
+# States: "Agent Chat", "Account"
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "Agent Chat"
 
 if "switch_page" in st.session_state and st.session_state.switch_page:
     target = st.session_state.switch_page
-    if target in options:
-        default_index = options.index(target)
-    # Clear the switch signal
+    # Map old targets if necessary, though simplified now
+    if target in ["Dashboard", "Settings"]:
+        st.session_state.current_page = "Account" # Redirect to Account hub
+    elif target in ["Agent Chat", "Account"]:
+         st.session_state.current_page = target
     st.session_state.switch_page = None
 
-# Sidebar 
+# Sidebar Layout (Strict ChatGPT Style)
 with st.sidebar:
-    st.header("GenAI Workspace")
+    # 1. App Header
+    st.title("GenAI Workspace")
     
-    selected_page = option_menu(
-        "Navigation", 
-        options,
-        icons=["speedometer2", "robot", "search", "gear", "person-circle"],
-        menu_icon="cast", 
-        default_index=default_index,
-    )
-    
+    # 2. New Chat Button (Primary Action)
+    if st.button("➕ New Chat", use_container_width=True, type="primary"):
+        st.session_state.current_conversation_id = None
+        st.session_state.chat_messages = []
+        st.session_state.current_page = "Agent Chat"
+        st.rerun()
+        
     st.markdown("---")
-    st.caption(f"Logged in as: {st.session_state.user_email}")
-
-    # Global Sidebar Actions
-    if selected_page == "Agent Chat":
-        if st.session_state.get("chat_messages"): # Only show if history exists
-            st.markdown("---")
-            if st.button("🗑️ Clear Chat History", use_container_width=True, type="secondary"):
-                st.session_state.chat_messages = []
+    
+    # 3. History List (Scrollable - takes most space)
+    st.caption("Recent")
+    # CSS to make this container take remaining height could be complex in pure Streamlit,
+    # but we can set a fixed large height or rely on natural flow.
+    # ChatGPT puts history here.
+    with st.container(height=500): 
+        # Pass user_email to get_conversations
+        user_email = st.session_state.get("user_email")
+        conversations = get_conversations(user_email) if user_email else []
+        
+        for conv in conversations:
+            # Highlight current conversation
+            is_current = st.session_state.get("current_conversation_id") == conv["id"]
+            
+            # Truncate title strictly to avoid wrapping (approx 18 chars max)
+            display_title = conv["title"]
+            if len(display_title) > 18:
+                display_title = display_title[:15] + "..."
+            
+            label = f"**{display_title}**" if is_current else display_title
+            
+            if st.button(label, key=f"conv_{conv['id']}", help=conv['title'], use_container_width=True):
+                st.session_state.current_conversation_id = conv["id"]
+                st.session_state.current_page = "Agent Chat" 
+                # Clear messages in global state so chat_page reloads them
+                st.session_state.chat_messages = [] 
                 st.rerun()
+    
+    # 4. Bottom Account Button
+    st.markdown("---")
+    
+    # Use a styled button for Account
+    # We want it to look like a user profile item at the bottom.
+    user_label = st.session_state.user_email
+    if len(user_label) > 20: user_label = user_label[:18] + "..."
+    
+    if st.button(f"👤 {user_label}", use_container_width=True):
+        st.session_state.current_page = "Account"
+        st.rerun()
 
 # Routing
-if selected_page == "Dashboard":
-    render_dashboard()
-elif selected_page == "Agent Chat":
+if st.session_state.current_page == "Account":
+    # This now renders the Hub (Profile, Dashboard, Settings)
+    from views.account_page import render_page as render_account_hub
+    render_account_hub()
+else:
+    # Default to Chat
     render_chat()
-elif selected_page == "Settings":
-    render_settings()
-elif selected_page == "Account":
-    render_account()
+

@@ -3,6 +3,7 @@ import streamlit as st
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
 from utils.auth_manager import login_google_user
+from utils.config_utils import get_env_var
 
 CLIENT_SECRETS_FILE = "client_secret.json"
 SCOPES = ['https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile', 'openid']
@@ -15,7 +16,7 @@ def get_google_auth_url():
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRETS_FILE,
         scopes=SCOPES,
-        redirect_uri="http://localhost:8501" # Start with local default
+        redirect_uri=get_env_var("REDIRECT_URI") or "http://localhost:8501"
     )
     
     auth_url, _ = flow.authorization_url(prompt='consent')
@@ -27,7 +28,7 @@ def handle_google_auth(code):
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE,
             scopes=SCOPES,
-            redirect_uri="http://localhost:8501"
+            redirect_uri=get_env_var("REDIRECT_URI") or "http://localhost:8501"
         )
         flow.fetch_token(code=code)
         credentials = flow.credentials

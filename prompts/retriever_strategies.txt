@@ -1,4 +1,4 @@
 1. '{direct_llm}': Use this for general knowledge, greetings, coding questions, logic puzzles, or topics not requiring specific document context (e.g., "Write a python script", "Who is the president of USA?", "Hi there").
 2. '{vector_based}': Use this when the query asks about "documents", "files", "this", "summarize this", or content implied to be in the uploaded knowledge base.
 3. '{hybrid}': Use this for complex queries needing both specific document facts AND general knowledge.
-4. '{web_search}': Use this for queries about recent events (post-2023), live data (stock prices, weather), or specific websites/URLs (e.g. "Search reddit for...", "Summarize techcrunch.com").
+4. '{web_search}': MANDATORY for: "latest version", "current status", "new features", "library updates", or topics likely not in training data (post-2023). Also for live data (stocks, weather) or specific URLs.

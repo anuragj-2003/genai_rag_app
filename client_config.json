@@ -1,0 +1,6 @@
+{
+    "tavily_depth": 5,
+    "temperature": 0.81,
+    "groq_model": "openai/gpt-oss-120b",
+    "search_count": 5
+}

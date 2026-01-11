@@ -9,11 +9,11 @@ langchain==0.3.20
 langchain-groq==0.2.2
 langchain-community==0.3.19
 langchain-text-splitters==0.3.7
-langchain-huggingface==0.1.7
-faiss-cpu==1.7.4
-sentence-transformers==5.2.0
-huggingface-hub==0.29.3
-pypdf==5.3.1
+langchain-huggingface
+faiss-cpu
+sentence-transformers
+huggingface-hub
+pypdf
 python-docx==1.1.2
 openpyxl==3.1.5
 bcrypt==5.0.0
@@ -25,8 +25,8 @@ google-auth-oauthlib==1.2.3
 Authlib==1.6.6
 
 tiktoken==0.12.0
-transformers==4.57.3
-torch==2.9.1
-numpy==2.2.4
-scikit-learn==1.8.0
-scipy==1.16.3
+transformers
+torch
+numpy
+scikit-learn
+scipy

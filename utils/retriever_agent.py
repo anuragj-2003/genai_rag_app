@@ -10,6 +10,9 @@ class RetrieverDecision(BaseModel):
     strategy: str = Field(description="The chosen retrieval strategy.")
     reasoning: str = Field(description="Explanation of why this strategy was chosen based on the query and retriever types.")
     refined_query: str = Field(description="A refined version of the query optimized for the chosen strategy.")
+    context_source: str = Field(description="The primary source of context for this query: 'document', 'chat_history', or 'general_knowledge'.")
+    confidence_score: int = Field(description="A score from 1-10 indicating confidence in the chosen context source.")
+    clarification_needed: bool = Field(description="True if the user's intent is ambiguous (e.g., 'update code' when multiple codes exist in different contexts).")
 
 def get_retriever_decision(user_query, api_key, model_name="llama3-8b-8192"):
     """
@@ -23,14 +26,20 @@ def get_retriever_decision(user_query, api_key, model_name="llama3-8b-8192"):
     Output:
         dict: A dictionary containing:
             - strategy (str): 'Direct LLM', 'Vector-Based', or 'Hybrid'.
-            - reasoning (str): Explanation for the choice.
+            - reasoning (str): Explanation.
             - refined_query (str): Optimized query.
+            - context_source (str): 'document' vs 'chat_history' vs 'general'.
+            - confidence_score (int): 1-10.
+            - clarification_needed (bool): True if ambiguous.
     """
     # Default fallback
     fallback_decision = {
         "strategy": RetrievalStrategy.VECTOR_BASED.value,
         "reasoning": "Default fallback.",
-        "refined_query": user_query
+        "refined_query": user_query,
+        "context_source": "general_knowledge",
+        "confidence_score": 5,
+        "clarification_needed": False
     }
 
     # 0. Regex Check for URLs

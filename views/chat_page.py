@@ -58,10 +58,15 @@ def render_page():
 
             if "retrieval_strategy" in msg:
                 strategy = msg["retrieval_strategy"]
-                badge_color = "blue"
+                badge_color = "gray"
+                
+                # Dynamic Coloring
                 if strategy == RetrievalStrategy.WEB_SEARCH.value: badge_color = "red"
-                elif strategy == RetrievalStrategy.VECTOR_BASED.value: badge_color = "green"
-                elif strategy == RetrievalStrategy.HYBRID.value: badge_color = "orange"
+                elif strategy in [RetrievalStrategy.DIRECT_LLM.value]: badge_color = "blue"
+                elif strategy in [RetrievalStrategy.HYBRID.value, RetrievalStrategy.RECOMMENDATION.value]: badge_color = "orange"
+                elif strategy in [RetrievalStrategy.GRAPH.value, RetrievalStrategy.GRAPH_QL.value, RetrievalStrategy.VECTOR_CYPHER.value]: badge_color = "violet"
+                elif strategy in [RetrievalStrategy.TEMPORAL.value, RetrievalStrategy.PATTERN.value]: badge_color = "purple"
+                else: badge_color = "green" # Default for Vector, Contextual, Entity, etc.
                 
                 st.markdown(f":{badge_color}[**[{strategy}]**]")
 
@@ -253,8 +258,10 @@ def render_page():
                 sources = []
                 
                 # Use Constants for Strategy Logic
-                is_retrieval_needed = agent_decision['strategy'] in [RetrievalStrategy.VECTOR_BASED.value, RetrievalStrategy.HYBRID.value]
+                # All strategies except DIRECT_LLM and WEB_SEARCH need Vector Retrieval
                 is_web_search = agent_decision['strategy'] == RetrievalStrategy.WEB_SEARCH.value
+                is_direct_llm = agent_decision['strategy'] == RetrievalStrategy.DIRECT_LLM.value
+                is_retrieval_needed = not (is_web_search or is_direct_llm)
                 
                 if is_retrieval_needed and st.session_state.vector_store_manager.vector_store is not None:
                     with st.spinner("Searching Vector Database..."):

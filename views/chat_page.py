@@ -6,7 +6,7 @@ import os
 from utils.api_clients import run_tavily_search, ask_groq
 from utils.logging_utils import log_search, log_llm_call
 from utils.text_utils import count_tokens
-from utils.database import log_interaction, find_similar_interaction, update_interaction_rating
+from utils.database import log_interaction, find_similar_interaction, update_interaction_rating, create_conversation, load_chat_history_from_db
 from utils.prompt_loader import load_prompt
 from utils.document_processor import process_uploaded_file
 from utils.vector_store_manager import VectorStoreManager
@@ -31,12 +31,15 @@ def render_page():
     Renders the RAG Agent page.
     Handled file uploads, auto-processing, chat interface, and intelligent agent routing.
     """
-    st.title("RAG Agent")
-    st.caption("Upload documents or ask general questions. The Agent will route your query.")
-
-
+    st.title(f"Hi, {st.session_state.get('user_full_name', 'there')}! 👋")
+    st.caption("I'm your intelligent agent. Upload documents or ask me anything.")
     
-
+    # Load history if needed (e.g. after switching conversations)
+    # If we have an ID but no messages, try loading.
+    if st.session_state.get("current_conversation_id") and not st.session_state.get("chat_messages"):
+        st.session_state.chat_messages = load_chat_history_from_db(st.session_state.current_conversation_id)
+    
+    # If no ID, we are in a "New Chat" state, so messages should be empty (handled by app.py new chat button)
 
     user_prompt = None # Initialize to avoid UnboundLocalError
 
@@ -88,7 +91,7 @@ def render_page():
                 with col1:
                     if st.button("👍", key=f"{feedback_key_base}_up"):
                         update_interaction_rating(msg["interaction_id"], 1)
-                        st.toast("Thanks!")
+                        #st.toast("Thanks!") 
                 with col2:
                     if st.button("👎", key=f"{feedback_key_base}_down"):
                         update_interaction_rating(msg["interaction_id"], -1)
@@ -171,6 +174,21 @@ def render_page():
         user_prompt = pending_q
 
     if user_prompt:
+        
+        # New Conversation Logic
+        if not st.session_state.get("current_conversation_id"):
+            # Generate title: First 30 chars approx
+            title = user_prompt[:35].strip()
+            if len(user_prompt) > 35:
+                title += "..."
+            
+            user_email = st.session_state.get("user_email")
+            # Fallback if no email (shouldn't happen due to auth check, but safe)
+            if not user_email: user_email = "anonymous" 
+            
+            new_id = create_conversation(title, user_email)
+            st.session_state.current_conversation_id = new_id
+        
         st.session_state.chat_messages.append({"role": "user", "content": user_prompt})
         with st.chat_message("user"):
             st.markdown(user_prompt)
@@ -181,10 +199,22 @@ def render_page():
             if cached_response:
                 st.success("⚡ Accessed from Memory")
                 st.markdown(cached_response)
+                
+                # Log Memory Hit Interaction
+                interaction_id = log_interaction(
+                    user_prompt=user_prompt,
+                    web_context="Memory Cache",
+                    llm_response=cached_response,
+                    source="Memory Cache",
+                    sources=[],
+                    conversation_id=st.session_state.current_conversation_id
+                )
+
                 st.session_state.chat_messages.append({
                     "role": "assistant", 
                     "content": cached_response,
-                    "source": "Memory Cache"
+                    "source": "Memory Cache",
+                    "interaction_id": interaction_id
                 })
                 # We can skip logging stats for memory hits or log them differently if desired
                 # For now, we rerun to update UI
@@ -198,9 +228,23 @@ def render_page():
                         st.session_state.settings.get("groq_model", "llama3-8b-8192")
                     )
                 
+                # Clarification Logic
+                if agent_decision.get("clarification_needed", False):
+                     st.warning("⚠️ Clarification Needed")
+                     st.write(f"**Agent Question:** {agent_decision['reasoning']}")
+                     st.info("Please refine your query to specify which context you mean (e.g., 'Update the code in the document' vs 'the previous example').")
+                     st.stop() # Halt execution to let user refine
 
+                # Context Prioritization
+                # If the agent is confident this is about Chat History, force Direct LLM/Hybrid without new retrieval if needed
+                if agent_decision.get("context_source") == "chat_history" and agent_decision.get("confidence_score", 0) > 7:
+                    if agent_decision["strategy"] == RetrievalStrategy.VECTOR_BASED.value:
+                         agent_decision["strategy"] = RetrievalStrategy.DIRECT_LLM.value
+                         agent_decision["reasoning"] += " (Forced Direct LLM due to high confidence in Chat History context)"
+                    
                 with st.expander("Agent Reasoning & Strategy", expanded=True):
                     st.write(f"**Strategy:** {agent_decision['strategy']}")
+                    st.write(f"**Context:** {agent_decision.get('context_source', 'Unknown')} (Confidence: {agent_decision.get('confidence_score', 0)}/10)")
                     st.write(f"**Reasoning:** {agent_decision['reasoning']}")
                     st.write(f"**Refined Query:** {agent_decision['refined_query']}")
 
@@ -263,6 +307,27 @@ def render_page():
                     rag_template = load_prompt("rag_response_system.txt")
                     system_prompt = rag_template.format(context_text=context_text)
                 
+                # In-Context Learning Injection
+                # 1. Positive Reinforcement
+                similar_interaction = find_similar_interaction(user_prompt)
+                if similar_interaction:
+                    st.success("💡 Learned from similar past interaction!") # Visual Feedback
+                    example_text = f"\n\nRELEVANT PAST EXAMPLE (Follow this style):\nUser: {similar_interaction['past_question']}\nAssistant: {similar_interaction['past_answer']}\n"
+                    system_prompt += example_text
+                
+                # 2. Negative Avoidance
+                from utils.database import find_similar_negative_interaction
+                negative_interaction = find_similar_negative_interaction(user_prompt)
+                if negative_interaction:
+                    st.warning("🛡️ Avoiding past mistake!") # Visual Feedback
+                    avoid_text = f"\n\n⛔ PREVIOUS MISTAKE (DO NOT REPEAT):\nUser: {negative_interaction['past_question']}\nAssistant: {negative_interaction['past_answer']}\n(This response was rated negatively. Avoid similar logic or style.)\n"
+                    system_prompt += avoid_text
+                
+                # Custom Persona Injection
+                custom_behavior = st.session_state.settings.get("custom_behavior", "").strip()
+                if custom_behavior:
+                    system_prompt += f"\n\n**USER CUSTOM INSTRUCTIONS**:\n{custom_behavior}\n"
+
                 messages = [{"role": "system", "content": system_prompt}] + [
                     {"role": m["role"], "content": m["content"]} for m in st.session_state.chat_messages if m["role"] != "system"
                 ]
@@ -280,7 +345,8 @@ def render_page():
                     web_context=context_text,
                     llm_response=response_text,
                     source=f"Groq ({model}) - {agent_decision['strategy']}",
-                    sources=[s.metadata if hasattr(s, 'metadata') else s for s in sources]
+                    sources=[s.metadata if hasattr(s, 'metadata') else s for s in sources],
+                    conversation_id=st.session_state.current_conversation_id
                 )
                 
                 # Save to Memory
@@ -295,7 +361,6 @@ def render_page():
                     "interaction_id": interaction_id
                 })
                 
-
                 log_llm_call(provider, model, count_tokens(str(messages)), count_tokens(response_text))
             
             st.rerun()

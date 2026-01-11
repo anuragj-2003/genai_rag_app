@@ -1,138 +1,75 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
-
+from utils.database import get_dashboard_stats
 
 def render_page():
-    """
-    Renders the main Dashboard page.
-    Displays hero section, system status, feature cards, and analytics tabs.
-    """
- 
-    c1, c2 = st.columns([2, 1])
-    with c1:
-        st.title("GenAI Workspace")
-        st.caption("Intelligent Document & Web Retrieval")
-        
-    with c2:
-        # Compact Status Card at Top Right
-        with st.container(border=True):
-            st.caption("**System Status**")
-            sc1, sc2 = st.columns(2)
-            sc1.markdown("🟢 **VectorDB**: Active")
-            sc2.markdown(f"🤖 **Model**: {st.session_state.settings.get('groq_model', 'llama-3.3-70b')}")
-
-    st.markdown("")
-
- 
-    col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1:
-        with st.container(border=True):
-            st.markdown("**🧠 Intelligent Routing**")
-            st.caption("Auto-detects Intent")
-    with col_f2:
-        with st.container(border=True):
-            st.markdown("**📄 Auto-RAG**")
-            st.caption("PDF/Doc/Excel Processing")
-    with col_f3:
-        with st.container(border=True):
-            st.markdown("**🌐 Live Web Search**")
-            st.caption("Tavily Integration")
+    """Renders the main Dashboard page with persistent database statistics."""
+    st.title("📊 Dashboard")
+    st.caption("Usage Statistics & Analytics")
     
+    user_email = st.session_state.get("user_email")
+    if not user_email:
+        st.warning("Please log in to view stats.")
+        return
+
+    # Fetch stats from DB
+    stats = get_dashboard_stats(user_email)
+    
+    # Top Metrics
+    with st.container(border=True):
+        st.subheader("Overview")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Conversations", stats.get("total_conversations", 0))
+        m2.metric("Total Messages", stats.get("total_interactions", 0))
+        
+        # Calculate roughly avg messages per chat
+        total_conv = stats.get("total_conversations", 0)
+        total_msg = stats.get("total_interactions", 0)
+        avg = round(total_msg / total_conv, 1) if total_conv > 0 else 0
+        m3.metric("Avg. Messages / Chat", avg)
+
     st.markdown("") # Spacing
 
- 
-    tab1, tab2, tab3 = st.tabs(["📊 Overview", "📈 Analytics", "🕒 Activity"])
+    # Charts Section
+    c1, c2 = st.columns(2)
     
-    with tab1:
-        with st.container(border=True):
-            st.subheader("Session Overview")
-            # Key Metrics
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric(label="Total Searches", value=st.session_state.search_count, delta="Session")
-            m2.metric(label="LLM Calls", value=st.session_state.llm_call_count)
-            m3.metric(label="Sources Scraped", value=st.session_state.pages_scraped_count)
-            m4.metric(label="Tokens Used", value=f"{st.session_state.token_count:,}")
-        
-    with tab2:
- 
-        with st.container(border=True):
-            st.subheader("🚀 Efficiency Metrics")
-            e1, e2, e3 = st.columns(3)
-            
-
-            total_calls = st.session_state.llm_call_count
-            total_tokens = st.session_state.token_count
-            avg_tokens = int(total_tokens / total_calls) if total_calls > 0 else 0
-            
-            total_searches = st.session_state.search_count
-            total_pages = st.session_state.pages_scraped_count
-            avg_pages = round(total_pages / total_searches, 1) if total_searches > 0 else 0.0
-
-            e1.metric(label="Avg. Tokens / Call", value=avg_tokens, help="Average complexity of LLM interactions")
-            e2.metric(label="Avg. Sources / Search", value=avg_pages, help="Average depth of web research")
-            e3.metric(label="Est. Cost Savings", value=f"${(total_tokens/1000)*0.03:.2f}", help="Estimated savings compared to GPT-4 ($0.03/1k tokens)")
-
-        st.write("") # Spacing
-
- 
-        c_chart1, c_chart2 = st.columns(2)
-        with c_chart1:
-            with st.container(border=True):
-                st.markdown("**Provider Usage**")
-                
-
-                raw_data = st.session_state.llm_provider_usage
-
-                clean_data = {k: v for k, v in raw_data.items() if "Ollama" not in k}
-                
-                if sum(clean_data.values()) > 0:
-                    df = pd.DataFrame(list(clean_data.items()), columns=['Provider', 'Count'])
-                    st.altair_chart(alt.Chart(df).mark_bar(cornerRadius=5, color='#02ab21').encode(
-                        x=alt.X('Provider', axis=alt.Axis(labelAngle=0)), 
-                        y='Count',
-                        tooltip=['Provider', 'Count']
-                    ), width="stretch")
-                else:
-                    st.info("No LLM calls yet.")
-                    
-        with c_chart2:
-            with st.container(border=True):
-                st.markdown("**Efficiency**")
-                # Placeholder or simply show token usage trend
-                st.metric("Avg Latency", "1.2s", "-0.1s")
-                st.caption("Response time optimization")
-
-    with tab3:
+    with c1:
         with st.container(border=True):
             st.subheader("Recent Activity")
-            if st.session_state.query_history:
-                st.caption("Click 'Reload' to run again.")
-                # Header
-                h1, h2, h3, h4 = st.columns([3, 1, 0.5, 0.5])
-                h1.markdown("**Query**")
-                h2.markdown("**Type**")
-                h3.markdown("**Action**")
-                st.markdown("") # Placeholder for the new column header
-                st.markdown("---")
+            activity_data = stats.get("activity_by_date", [])
+            
+            if activity_data:
+                df_activity = pd.DataFrame(activity_data)
+                # Ensure date format
+                df_activity["day"] = pd.to_datetime(df_activity["day"]).dt.strftime('%Y-%m-%d')
                 
-                for i, item in enumerate(st.session_state.query_history):
-                    c1, c2, c3, c4 = st.columns([3, 1, 0.5, 0.5])
-                    c1.write(item["Query"])
-                    c2.caption(item["Type"])
-                    
-                    if c3.button("🔄", key=f"hist_btn_{i}", help="Rerun"):
-                        st.session_state.max_nav_page = "Chat"
-                        st.session_state.pending_query = item["Query"]
-                        st.session_state.switch_page = "Chat"
-                        st.rerun()
-                        
-                    if c4.button("✏️", key=f"edit_btn_{i}", help="Edit & Run"):
-                         st.session_state.max_nav_page = "Chat"
-                         st.session_state.editing_query = item["Query"]
-                         st.session_state.switch_page = "Chat"
-                         st.rerun()
-                    
-                    st.markdown("---")
+                chart = alt.Chart(df_activity).mark_bar(cornerRadius=5).encode(
+                    x=alt.X("day", title="Date", sort="-x"),
+                    y=alt.Y("count", title="Interactions"),
+                    color=alt.value("#ff4b4b"),
+                    tooltip=["day", "count"]
+                ).properties(height=300)
+                st.altair_chart(chart, use_container_width=True)
             else:
-                st.info("No recent activity.")
+                st.info("No activity recorded yet.")
+
+    with c2:
+        with st.container(border=True):
+            st.subheader("Usage by Source")
+            source_data = stats.get("source_distribution", [])
+            
+            if source_data:
+                df_source = pd.DataFrame(source_data)
+                # Clean up source names (remove model details if needed, but keeping for now)
+                chart = alt.Chart(df_source).mark_arc(innerRadius=50).encode(
+                    theta="count",
+                    color=alt.Color("source", legend=alt.Legend(orient="bottom")),
+                    tooltip=["source", "count"]
+                ).properties(height=300)
+                st.altair_chart(chart, use_container_width=True)
+            else:
+                st.info("No data available.")
+
+    st.markdown("---")
+    st.caption("Statistics are generated from your saved history.")

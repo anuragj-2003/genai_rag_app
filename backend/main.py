@@ -28,6 +28,7 @@ origins = [
     "http://localhost:3000",
     "https://genai-agent-app.netlify.app", # Old Name
     "https://agentic-rag.netlify.app", # Actual Netlify Name
+    "https://genai-rag-app.vercel.app", # Vercel Deployment
 ]
 
 app.add_middleware(

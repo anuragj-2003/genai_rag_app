@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const api = axios.create({
     baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8002',
-    timeout: 10000, // 10 seconds timeout
+    timeout: 60000, // 60 seconds timeout (Render Cold Start safe)
 });
 
 // Add a request interceptor to include the token

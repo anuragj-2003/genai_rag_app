@@ -7,11 +7,11 @@ import os
 
 load_dotenv()
 
-from routers import auth, chat, documents, settings, feedback
 from init_dbs import init_dbs
-
 # Initialize Database on Startup (Crucial for Render)
 init_dbs()
+
+from routers import auth, chat, documents, settings, feedback
 
 app = FastAPI(title="GenAI Workspace API")
 

@@ -8,6 +8,10 @@ import os
 load_dotenv()
 
 from routers import auth, chat, documents, settings, feedback
+from init_dbs import init_dbs
+
+# Initialize Database on Startup (Crucial for Render)
+init_dbs()
 
 app = FastAPI(title="GenAI Workspace API")
 
@@ -22,7 +26,8 @@ origins = [
     "http://localhost:5173", # Vite Default
     "http://127.0.0.1:5173",
     "http://localhost:3000",
-    "https://genai-agent-app.netlify.app", # Netlify Production
+    "https://genai-agent-app.netlify.app", # Old Name
+    "https://agentic-rag.netlify.app", # Actual Netlify Name
 ]
 
 app.add_middleware(

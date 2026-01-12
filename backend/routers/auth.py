@@ -58,15 +58,7 @@ async def signup(user: UserCreate):
         c.execute("INSERT OR REPLACE INTO otp_codes (email, code, type, expires_at) VALUES (?, ?, 'signup', ?)", (user.email, otp, expiry))
         conn.commit()
         
-        sent = send_otp_email(user.email, otp)
-        
-        # Fallback for Render Free Tier (where SMTP is likely blocked)
-        if not sent:
-             print(f"SMTP Failed. Using Fallback OTP for {user.email}")
-             # Update OTP to '000000' so user can login with that
-             fallback_otp = "000000"
-             c.execute("UPDATE otp_codes SET code = ? WHERE email = ?", (fallback_otp, user.email))
-             conn.commit()
+        send_otp_email(user.email, otp)
 
         
         # Return a dummy user object or success message

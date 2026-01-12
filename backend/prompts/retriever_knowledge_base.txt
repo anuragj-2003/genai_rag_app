@@ -1,0 +1,24 @@
+Types of Retrievers:
+1. Vector-Based Retrievers: Use vector representations (embeddings) of text to find semantically similar documents. 
+   - Good for: Concept-based queries, accurate semantic matching, finding related information even without exact keywords.
+   - Pros: Accuracy for complex queries, flexibility (text, images).
+   - Cons: Limited context understanding for ambiguous queries, scalability challenges.
+   
+2. Keyword-Based Retrievers: Traditional search matching exact words.
+   - Good for: Exact phrase searching, specific technical terms, names.
+   
+3. Hybrid Retrievers: Combine Vector and Keyword strategies.
+   - Good for: Balancing semantic understanding with exact matching.
+   
+4. Graph-Based / Contextual Retrievers: Use knowledge graphs or context.
+   - Good for: Complex relationships, structured data querying.
+   
+5. Specialized (Time/Pattern):
+   - Temporal: Time-based queries.
+   - Pattern: Regex or specific pattern matching.
+
+Steps in Retrieval:
+1. Query Identification
+2. Conversion (Tokenization/Embedding)
+3. Matching (Similarity Search)
+4. Response Generation

@@ -1,0 +1,16 @@
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+
+# Backend
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Database
+*.db
+backend/data/*.db
+data/

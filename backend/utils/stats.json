@@ -1,0 +1,1 @@
+{"search_count": 17, "llm_call_count": 56, "token_count": 129692, "pages_scraped_count": 45, "llm_provider_usage": {"Groq (Web-based)": 56, "Ollama (Local)": 0}, "llm_model_usage": {"llama3-8b-8192": 2, "llama-3.3-70b-versatile": 49, "openai/gpt-oss-120b": 5}}

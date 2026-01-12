@@ -1,0 +1,16 @@
+1. '{direct_llm}': Use this for general knowledge, greetings, coding questions, logic puzzles, or topics not requiring specific document context.
+2. '{web_search}': MANDATORY for: "latest", "current", "new", "updates", or live data (stocks, weather).
+3. '{vector}': Use for "semantically similar" document search (Standard RAG). Use for general document queries.
+4. '{vector_cypher}': Use when query implies both semantic similarity AND graph/relationship traversal.
+5. '{embedding}': Use for Deep Semantic Search capturing subtle meaning, specifically for text/image/multilingual content.
+6. '{keyword}': Use for "exact match" or "specific term" search.
+7. '{custom}': Use when the query implies specific logic, filters, or strict criteria (e.g., "Find documents with tag X").
+8. '{contextual}': Use when the result depends on "surrounding context", metadata, or implied situational meaning.
+9. '{entity}': Use for "Where is [Person/Object]?", "Who is X?", or identifying specific named entities in the data.
+10. '{graph}': Use for questions about "connections", "paths", "relationships", "between X and Y", or network structures.
+11. '{graph_ql}': Use if the user asks for a specific "schema", "field", or structured API-style data retrieval.
+12. '{hybrid}': Use for complex queries needing BOTH "keyword precision" AND "semantic breadth".
+13. '{text2cypher}': Use if the user asks to "convert this natural language to a database query" or "query the graph DB".
+14. '{recommendation}': Use for "suggest similar items", "what should I read next?", or "based on my preferences".
+15. '{pattern}': Use for "identify the trend", "find the recurring structure", or "detect anomalies" (visual or abstract).
+16. '{temporal}': Use for "timeline of events", "chronological order", "what happened before/after", or time-series data.

@@ -4,12 +4,12 @@ A modern, full-stack AI-powered search and research assistant. Built with **Reac
 
 ## Features
 
--   ** Agentic Reasoning**: An AI agent that thinks step-by-step to answer complex queries.
--   ** Modern UI**: Sleek, responsive "Black" theme dashboard built with Tailwind CSS.
--   ** Chat Interface**: Real-time chat with support for renaming, pinning, and deleting conversations.
--   ** Edit & Rerun**: Edit your messages and rerun the AI response.
--   ** Document RAG**: Upload documents for the AI to analyze and reference.
--   ** Secure Auth**: Email/Password authentication with OTP verification and JWT sessions.
+-   **Agentic Reasoning**: An AI agent that thinks step-by-step to answer complex queries.
+-   **Modern UI**: Sleek, responsive "Black" theme dashboard built with Tailwind CSS.
+-   **Chat Interface**: Real-time chat with support for renaming, pinning, and deleting conversations.
+-   **Edit & Rerun**: Edit your messages and rerun the AI response.
+-   **Document RAG**: Upload documents for the AI to analyze and reference.
+-   **Secure Auth**: Email/Password authentication with OTP verification and JWT sessions.
 
 ## Tech Stack
 

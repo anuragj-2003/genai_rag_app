@@ -15,7 +15,7 @@ export const AuthProvider = ({ children }) => {
             setUser(res.data);
         } catch (err) {
             console.error("Failed to fetch user:", err.message);
-            // If 401 (Unauthorized) or timeout, we should log out
+            // If unauthorized and NOT a guest token, logout
             if (err.response?.status === 401 || err.code === 'ECONNABORTED') {
                 logout();
             }
@@ -25,29 +25,37 @@ export const AuthProvider = ({ children }) => {
     };
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            fetchUser(token);
-        } else {
-            setLoading(false);
+        let token = localStorage.getItem('token');
+        if (!token) {
+            let guestToken = localStorage.getItem('guest_token');
+            if (!guestToken) {
+                guestToken = 'guest_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+                localStorage.setItem('guest_token', guestToken);
+            }
+            localStorage.setItem('token', guestToken);
+            token = guestToken;
         }
+        fetchUser(token);
     }, []);
 
     const login = async (username, password) => {
-        const formData = new FormData();
-        formData.append('username', username);
-        formData.append('password', password);
+        setLoading(true);
+        try {
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('password', password);
 
-        const res = await api.post('/auth/token', formData);
-        const token = res.data.access_token;
-        localStorage.setItem('token', token);
-        await fetchUser(token);
+            const res = await api.post('/auth/token', formData);
+            const token = res.data.access_token;
+            localStorage.setItem('token', token);
+            await fetchUser(token);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const signup = async (email, password, fullName) => {
         await api.post('/auth/signup', { email, password, full_name: fullName });
-        // Don't auto-login, wait for OTP if enforced, or just allow login
-        // For now, let's auto-login to simplify, or redirect to OTP logic in UI
     };
 
     const verifyOtp = async (email, otp) => {
@@ -64,11 +72,38 @@ export const AuthProvider = ({ children }) => {
 
     const logout = () => {
         localStorage.removeItem('token');
-        setUser(null);
+        const guestToken = localStorage.getItem('guest_token');
+        if (guestToken) {
+            localStorage.setItem('token', guestToken);
+            fetchUser(guestToken);
+        } else {
+            setUser(null);
+            setLoading(false);
+        }
     };
 
+    const refreshUser = async () => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            await fetchUser(token);
+        }
+    };
+
+    const isAuthenticated = !!user && !user.is_guest;
+
     return (
-        <AuthContext.Provider value={{ user, isAuthenticated: !!user, loading, login, signup, logout, verifyOtp, forgotPassword, resetPassword }}>
+        <AuthContext.Provider value={{ 
+            user, 
+            isAuthenticated, 
+            loading, 
+            login, 
+            signup, 
+            logout, 
+            verifyOtp, 
+            forgotPassword, 
+            resetPassword,
+            refreshUser
+        }}>
             {children}
         </AuthContext.Provider>
     );

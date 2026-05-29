@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Send, Paperclip, Loader2, FileText, Sparkles, Bot, User as UserIcon, ThumbsUp, ThumbsDown, RotateCcw, Edit2, ChevronLeft, ChevronRight, X, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import api from '../api';
+import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import CodeBlock from '../components/CodeBlock';
 
@@ -194,6 +196,9 @@ const MessageItem = ({ msg, idx, onFeedback, onRerun, onEdit, isEditing, onSaveE
 };
 
 const Chat = ({ currentChatId }) => {
+    const navigate = useNavigate();
+    const { user, refreshUser } = useAuth();
+    
     // State variables
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -274,9 +279,15 @@ const Chat = ({ currentChatId }) => {
             try {
                 await api.post('/documents/upload', formData);
                 setFile(selectedFile);
+                await refreshUser();
             } catch (uploadError) {
                 console.error("Upload Error:", uploadError);
-                alert("Could not upload file.");
+                if (uploadError.response?.status === 403) {
+                    alert("Demo limit exceeded. Please sign up to continue!");
+                    navigate('/login', { state: { limitExceeded: true } });
+                } else {
+                    alert("Could not upload file.");
+                }
             }
 
         } catch (err) {
@@ -352,9 +363,16 @@ const Chat = ({ currentChatId }) => {
                 });
 
                 success = true; // Break loop
+                await refreshUser();
 
             } catch (apiError) {
                 console.error(`API Attempt ${attempt + 1} failed:`, apiError);
+                if (apiError.response?.status === 403) {
+                    alert("Demo limit exceeded. Please sign up to continue!");
+                    navigate('/login', { state: { limitExceeded: true } });
+                    setLoading(false);
+                    return;
+                }
                 attempt++;
 
                 // On final failure
@@ -480,6 +498,24 @@ const Chat = ({ currentChatId }) => {
 
     return (
         <div className="flex flex-col h-full max-w-5xl mx-auto w-full relative">
+
+            {/* Demo Mode Banner */}
+            {user && user.is_guest && (
+                <div className="bg-gradient-to-r from-blue-950/60 via-zinc-900/80 to-blue-950/60 border border-zinc-800/80 rounded-2xl m-4 mb-0 p-3.5 text-center text-sm text-zinc-300 flex flex-wrap items-center justify-between gap-3 shadow-lg shadow-black/40 backdrop-blur-md">
+                    <div className="flex items-center gap-2">
+                        <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-semibold text-xs border border-blue-500/20 uppercase tracking-wider">
+                            <Sparkles size={12} className="animate-pulse" /> Demo Mode
+                        </span>
+                        <span>You have used <strong className="text-white font-bold">{user.usage_count} / {user.usage_limit}</strong> free actions (chats & uploads).</span>
+                    </div>
+                    <button 
+                        onClick={() => navigate('/login')} 
+                        className="px-4 py-1.5 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                    >
+                        Sign Up for Unlimited Access
+                    </button>
+                </div>
+            )}
 
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 custom-scrollbar">

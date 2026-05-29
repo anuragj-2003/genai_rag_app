@@ -1,19 +1,20 @@
 import os
 import tempfile
 import pandas as pd
-from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, UnstructuredExcelLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
+import pypdf
+import docx
+from llama_index.core import Document
+from llama_index.core.node_parser import SentenceSplitter
 
 def process_uploaded_file(uploaded_file):
     """
-    Processes an uploaded file (PDF, DOCX, XLSX) and returns a list of LangChain Documents.
+    Processes an uploaded file (PDF, DOCX, XLSX) and returns a list of LlamaIndex Documents.
     
     Input:
-        uploaded_file (UploadedFile): The file object from Streamlit uploader.
+        uploaded_file (UploadedFile): An object containing .name and .getvalue()
         
     Output:
-        list: A list of LangChain Document objects with metadata (source, page).
+        list: A list of LlamaIndex Document objects with metadata (source, page).
     """
     if uploaded_file is None:
         return []
@@ -21,41 +22,53 @@ def process_uploaded_file(uploaded_file):
     file_extension = os.path.splitext(uploaded_file.name)[1].lower()
     documents = []
 
-    # Create a temporary file to save the uploaded content because LangChain loaders often need a file path
+    # Create a temporary file to save the uploaded content
     with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
         tmp_file.write(uploaded_file.getvalue())
         tmp_file_path = tmp_file.name
 
     try:
         if file_extension == ".pdf":
-            loader = PyPDFLoader(tmp_file_path)
-            documents = loader.load()
+            reader = pypdf.PdfReader(tmp_file_path)
+            for i, page in enumerate(reader.pages):
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    documents.append(Document(
+                        text=page_text,
+                        metadata={"source": uploaded_file.name, "page": i + 1}
+                    ))
         elif file_extension == ".docx":
-            loader = Docx2txtLoader(tmp_file_path)
-            documents = loader.load()
-            # Docx loader might not give page numbers, default to 1
-            for doc in documents:
-                doc.metadata["page"] = 1
-        elif file_extension == ".xlsx" or file_extension == ".xls":
-            # flexible handling for excel
+            doc_file = docx.Document(tmp_file_path)
+            full_text = []
+            for para in doc_file.paragraphs:
+                full_text.append(para.text)
+            text = '\n'.join(full_text)
+            if text.strip():
+                documents.append(Document(
+                    text=text,
+                    metadata={"source": uploaded_file.name, "page": 1}
+                ))
+        elif file_extension in [".xlsx", ".xls"]:
             try:
-                # First try pandas for a simpler text representation
                 df = pd.read_excel(tmp_file_path)
                 text_content = df.to_string()
-                documents = [Document(page_content=text_content, metadata={"source": uploaded_file.name, "page": 1})]
+                if text_content.strip():
+                    documents.append(Document(
+                        text=text_content,
+                        metadata={"source": uploaded_file.name, "page": 1}
+                    ))
             except Exception:
-                # Fallback to loader
-                loader = UnstructuredExcelLoader(tmp_file_path)
-                documents = loader.load()
-                for doc in documents:
-                    if "page" not in doc.metadata:
-                        doc.metadata["page"] = 1
+                pass
         else:
             # Fallback for text files
             try:
                 with open(tmp_file_path, "r", encoding="utf-8") as f:
                     text = f.read()
-                documents = [Document(page_content=text, metadata={"source": uploaded_file.name, "page": 1})]
+                if text.strip():
+                    documents.append(Document(
+                        text=text,
+                        metadata={"source": uploaded_file.name, "page": 1}
+                    ))
             except Exception:
                 pass
     finally:
@@ -65,18 +78,27 @@ def process_uploaded_file(uploaded_file):
 
     # Split text if we have documents
     if documents:
-        text_splitter = RecursiveCharacterTextSplitter(
+        # Use LlamaIndex SentenceSplitter
+        splitter = SentenceSplitter(
             chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
+            chunk_overlap=200
         )
-        split_docs = text_splitter.split_documents(documents)
-        # Ensure source metadata is preserved/set
-        for doc in split_docs:
-            if "source" not in doc.metadata:
-                doc.metadata["source"] = uploaded_file.name
-            else:
-                doc.metadata["source"] = f"{uploaded_file.name} - {doc.metadata.get('source', '')}"
+        nodes = splitter.get_nodes_from_documents(documents)
+        
+        # Convert nodes to LlamaIndex Document objects for indexing compatibility
+        split_docs = []
+        for node in nodes:
+            # Preserve/set metadata
+            source = node.metadata.get("source", uploaded_file.name)
+            page = node.metadata.get("page", 1)
+            
+            split_docs.append(Document(
+                text=node.text,
+                metadata={
+                    "source": source,
+                    "page": page
+                }
+            ))
         return split_docs
     
     return []

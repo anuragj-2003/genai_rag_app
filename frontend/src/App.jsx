@@ -8,9 +8,14 @@ import { useAuth } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { user, isAuthenticated, loading } = useAuth();
   if (loading) return <div className="flex items-center justify-center h-screen bg-slate-900 text-white">Loading...</div>;
-  if (!isAuthenticated) return <Navigate to="/login" />;
+  if (!isAuthenticated && (!user || !user.is_guest)) {
+    return <Navigate to="/login" />;
+  }
+  if (user && user.is_guest && user.limit_exceeded) {
+    return <Navigate to="/login" state={{ limitExceeded: true }} />;
+  }
   return children;
 };
 

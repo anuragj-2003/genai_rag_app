@@ -8,7 +8,7 @@ class Message(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
-    model: str = "llama-3.3-70b-versatile"
+    model: str = "openai/gpt-oss-120b"
     system_prompt: Optional[str] = None
 
 class ChatResponse(BaseModel):

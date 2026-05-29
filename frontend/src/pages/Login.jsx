@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, User, ArrowRight, Loader2, KeyRound } from 'lucide-react';
 
 const Login = () => {
@@ -18,6 +18,8 @@ const Login = () => {
 
     const { login, signup, verifyOtp, forgotPassword, resetPassword } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
+    const limitExceeded = location.state?.limitExceeded;
 
     const handleAuth = async (e) => {
         e.preventDefault();
@@ -86,6 +88,13 @@ const Login = () => {
                         {mode === 'reset' && 'Set your new secure password'}
                     </p>
                 </div>
+
+                {limitExceeded && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-xl mb-6 text-sm flex flex-col gap-1.5 shadow-lg shadow-amber-900/5">
+                        <span className="font-semibold text-amber-300 flex items-center gap-1.5">Demo Limit Reached</span>
+                        <span className="text-zinc-400">You have used up your 5 free demo interactions. Please sign in or create an account to get unlimited access!</span>
+                    </div>
+                )}
 
                 {error && (
                     <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl mb-6 text-sm flex items-center gap-2">
@@ -205,6 +214,16 @@ const Login = () => {
                     >
                         {loading ? <Loader2 className="animate-spin" /> : <span className="flex items-center gap-2">Continue <ArrowRight size={16} /></span>}
                     </button>
+
+                    {!limitExceeded && (mode === 'login' || mode === 'signup') && (
+                        <button
+                            type="button"
+                            onClick={() => navigate('/')}
+                            className="w-full mt-3 py-3 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/50 rounded-xl text-sm font-medium text-zinc-400 hover:text-white transition-all duration-200 cursor-pointer flex items-center justify-center gap-2"
+                        >
+                            Try Demo (Continue as Guest)
+                        </button>
+                    )}
                 </form>
 
                 <div className="mt-8 pt-6 border-t border-zinc-800/50">

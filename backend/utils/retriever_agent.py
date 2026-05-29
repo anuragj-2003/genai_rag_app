@@ -1,7 +1,6 @@
 import json
-from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
+from llama_index.llms.groq import Groq
+from llama_index.core.llms import ChatMessage, MessageRole
 from pydantic import BaseModel, Field
 from utils.constants import RetrievalStrategy
 from utils.prompt_loader import load_prompt
@@ -42,7 +41,7 @@ def get_retriever_decision(user_query, api_key, model_name="llama-3.3-70b-versat
         "clarification_needed": False
     }
 
-    # 0. Regex Check for URLs
+    # Regex Check for URLs
     import re
     # Pattern to find URLs
     url_pattern = r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+'
@@ -61,9 +60,7 @@ def get_retriever_decision(user_query, api_key, model_name="llama-3.3-70b-versat
         return fallback_decision
 
     try:
-        llm = ChatGroq(temperature=0, groq_api_key=api_key, model_name=model_name)
-        
-        parser = JsonOutputParser(pydantic_object=RetrieverDecision)
+        llm = Groq(model=model_name, api_key=api_key, temperature=0.0)
         
         # Dynamic Prompt using Enum values
         strategies_template = load_prompt("retriever_strategies.txt")
@@ -77,12 +74,25 @@ def get_retriever_decision(user_query, api_key, model_name="llama-3.3-70b-versat
         router_system_template = load_prompt("retriever_router_system.txt")
         retriever_knowledge_base = load_prompt("retriever_knowledge_base.txt")
         
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", router_system_template),
-            ("user", "Query: {query}\n\n{format_instructions}")
-        ])
+        system_content = f"{base_instruction}{router_system_template.format(strategies_text=strategies_text, knowledge_base=retriever_knowledge_base, vector_strategy=RetrievalStrategy.VECTOR.value, direct_strategy=RetrievalStrategy.DIRECT_LLM.value, web_strategy=RetrievalStrategy.WEB_SEARCH.value)}"
         
-        chain = prompt | llm | parser
+        format_instructions = (
+            "Format your output as a valid JSON object matching the following Pydantic schema:\n"
+            "{\n"
+            '  "strategy": "string",  # The chosen retrieval strategy\n'
+            '  "reasoning": "string", # Explanation of why this strategy was chosen\n'
+            '  "refined_query": "string", # A refined version of the query\n'
+            '  "context_source": "string", # "document", "chat_history", or "general_knowledge"\n'
+            '  "confidence_score": 1-10,  # Confidence score\n'
+            '  "clarification_needed": boolean # True if user intent is ambiguous\n'
+            "}\n"
+            "Ensure the response is ONLY a JSON block, nothing else."
+        )
+
+        messages = [
+            ChatMessage(role=MessageRole.SYSTEM, content=system_content),
+            ChatMessage(role=MessageRole.USER, content=f"Query: {user_query}\n\n{format_instructions}")
+        ]
         
         # Retry logic
         max_retries = 3
@@ -90,18 +100,20 @@ def get_retriever_decision(user_query, api_key, model_name="llama-3.3-70b-versat
         
         for attempt in range(max_retries):
             try:
-                decision = chain.invoke({
-                    "strategies_text": strategies_text,
-                    "knowledge_base": retriever_knowledge_base,
-                    "vector_strategy": RetrievalStrategy.VECTOR_BASED.value,
-                    "direct_strategy": RetrievalStrategy.DIRECT_LLM.value,
-                    "web_strategy": RetrievalStrategy.WEB_SEARCH.value,
-                    "query": user_query,
-                    "format_instructions": parser.get_format_instructions()
-                })
+                response = llm.chat(messages)
+                content = response.message.content
+                
+                # Extract JSON if markdown wrapped
+                if "```json" in content:
+                    content = content.split("```json")[1].split("```")[0]
+                elif "```" in content:
+                    content = content.split("```")[1].split("```")[0]
+                
+                decision = json.loads(content.strip())
+                
                 # Validate strategy is known
                 if decision.get("strategy") not in [s.value for s in RetrievalStrategy]:
-                     decision["strategy"] = RetrievalStrategy.VECTOR_BASED.value # Default to safe option if hallucinated
+                     decision["strategy"] = RetrievalStrategy.VECTOR.value
                 return decision
             except Exception as e:
                 last_error = e

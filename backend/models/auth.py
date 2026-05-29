@@ -17,6 +17,10 @@ class UserCreate(UserBase):
 
 class User(UserBase):
     is_verified: bool = False
+    is_guest: Optional[bool] = False
+    usage_count: Optional[int] = None
+    usage_limit: Optional[int] = None
+    limit_exceeded: Optional[bool] = None
     
     class Config:
         from_attributes = True

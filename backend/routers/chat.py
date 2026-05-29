@@ -4,9 +4,8 @@ from models.auth import User
 from models.chat import ChatRequest, ChatResponse, ConversationUpdate
 from utils.retriever_agent import get_retriever_decision, RetrievalStrategy
 from state import vector_store
-from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from llama_index.llms.groq import Groq
+from llama_index.core.llms import ChatMessage, MessageRole
 import os
 import sqlite3
 import json
@@ -54,14 +53,22 @@ def get_chat_history(conversation_id):
     conn.close()
     messages = []
     for row in reversed(rows):
-        messages.append(HumanMessage(content=row["user_prompt"]))
-        messages.append(AIMessage(content=row["llm_response"]))
+        messages.append(ChatMessage(role=MessageRole.USER, content=row["user_prompt"]))
+        messages.append(ChatMessage(role=MessageRole.ASSISTANT, content=row["llm_response"]))
     return messages
 
 @router.post("/", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_current_user)):
     user_id = current_user.email 
     
+    # Guest Limit Check
+    if user_id.startswith("guest_"):
+        from routers.auth import get_guest_usage, increment_guest_usage
+        count = get_guest_usage(user_id)
+        if count >= 5:
+            raise HTTPException(status_code=403, detail="Demo limit exceeded. Please authenticate.")
+        increment_guest_usage(user_id)
+
     # Check Conversation ID
     if not request.conversation_id:
         title = request.message[:30] + "..."
@@ -72,19 +79,10 @@ def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_current
         raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured")
 
     # 1. Decide Strategy (Simple/Manual for now to match reference)
-    # We can assume Vector Search if documents exist, or Web if explicit.
-    # For now, we'll do a simple "Smart Retrieval" check.
-    
-    # NOTE: In 'junior dev' style, we might just search indiscriminately to be safe and simple.
-    # But let's use the helper if available, or just default to vector search k=2
-    
     context = ""
     sources = []
     strategy = "direct"
     
-    # Simple Heuristic: If there are docs in vector store, search them.
-    # But checking vector_store size is hard without a count method.
-    # Let's just try to search and see if we get anything good.
     try:
         docs = vector_store.similarity_search(request.message, k=2)
         if docs:
@@ -94,13 +92,11 @@ def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_current
             strategy = "vector"
     except Exception:
         pass # Vector store might be empty or uninitialized
+ 
+    # 2. Setup LLM (LlamaIndex Groq)
+    llm = Groq(model=request.model, api_key=api_key, temperature=0.3)
 
-    # 2. Setup LLM
-    llm = ChatGroq(temperature=0.3, groq_api_key=api_key, model_name=request.model)
-
-    # 3. Construct System Prompt (The "Reasoning" Part)
-    # Ref: Reference project uses "IMPORTANT: ... Explain all code..."
-    
+    # 3. Construct System Prompt
     reasoning_instruction = (
         "You are a smart AI assistant. "
         "Think step-by-step before answering. "
@@ -115,11 +111,11 @@ def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_current
     history = get_chat_history(request.conversation_id)
     
     # 5. Build Message List
-    messages = [SystemMessage(content=full_system_prompt)] + history + [HumanMessage(content=request.message)]
+    messages = [ChatMessage(role=MessageRole.SYSTEM, content=full_system_prompt)] + history + [ChatMessage(role=MessageRole.USER, content=request.message)]
     
     # 6. Run
-    response = llm.invoke(messages)
-    response_text = response.content
+    response = llm.chat(messages)
+    response_text = response.message.content
     
     # 7. Log
     log_interaction_db(user_id, request.conversation_id, request.message, response_text, strategy, sources)

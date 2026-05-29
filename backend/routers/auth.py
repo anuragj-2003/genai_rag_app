@@ -184,7 +184,41 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+def get_guest_usage(guest_id: str) -> int:
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT usage_count FROM guest_usages WHERE guest_id = ?", (guest_id,))
+    row = c.fetchone()
+    if row:
+        count = row["usage_count"]
+    else:
+        c.execute("INSERT INTO guest_usages (guest_id, usage_count) VALUES (?, 0)", (guest_id,))
+        conn.commit()
+        count = 0
+    conn.close()
+    return count
+
+def increment_guest_usage(guest_id: str):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT usage_count FROM guest_usages WHERE guest_id = ?", (guest_id,))
+    row = c.fetchone()
+    if row:
+        c.execute("UPDATE guest_usages SET usage_count = usage_count + 1 WHERE guest_id = ?", (guest_id,))
+    else:
+        c.execute("INSERT INTO guest_usages (guest_id, usage_count) VALUES (?, 1)", (guest_id,))
+    conn.commit()
+    conn.close()
+
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+    if token.startswith("guest_"):
+        return User(
+            email=token,
+            full_name="Guest User",
+            is_verified=False,
+            is_guest=True
+        )
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -211,9 +245,15 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     return User(
         email=user["email"], 
         full_name=user["full_name"],
-        is_verified=bool(user["is_verified"]) if "is_verified" in user.keys() else False
+        is_verified=bool(user["is_verified"]) if "is_verified" in user.keys() else False,
+        is_guest=False
     )
     
 @router.get("/me", response_model=User)
 async def read_users_me(current_user: User = Depends(get_current_user)):
+    if current_user.email.startswith("guest_"):
+        count = get_guest_usage(current_user.email)
+        current_user.usage_count = count
+        current_user.usage_limit = 5
+        current_user.limit_exceeded = count >= 5
     return current_user

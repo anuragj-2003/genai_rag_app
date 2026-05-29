@@ -16,6 +16,14 @@ async def upload_document(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user)
 ):
+    user_id = current_user.email
+    if user_id.startswith("guest_"):
+        from routers.auth import get_guest_usage, increment_guest_usage
+        count = get_guest_usage(user_id)
+        if count >= 5:
+            raise HTTPException(status_code=403, detail="Demo limit exceeded. Please authenticate.")
+        increment_guest_usage(user_id)
+
     try:
         # process_uploaded_file expects a Streamlit UploadedFile-like object or needs adaptation.
         # It reads .name and .getvalue(). FastAPI UploadFile has .filename and .file (spooled temp file).

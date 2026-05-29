@@ -6,7 +6,7 @@ export const useSettings = () => useContext(SettingsContext);
 
 export const SettingsProvider = ({ children }) => {
     // Load from localStorage or defaults
-    const [model, setModel] = useState(localStorage.getItem('model') || "llama-3.3-70b-versatile");
+    const [model, setModel] = useState(localStorage.getItem('model') || "openai/gpt-oss-120b");
     const [systemPrompt, setSystemPrompt] = useState(localStorage.getItem('systemPrompt') || "You are a helpful AI assistant.");
     const [temperature, setTemperature] = useState(parseFloat(localStorage.getItem('temperature')) || 0.7);
 

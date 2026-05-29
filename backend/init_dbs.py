@@ -46,6 +46,15 @@ def init_dbs():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    
+    # Init Guest Usages table
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS guest_usages (
+            guest_id TEXT PRIMARY KEY,
+            usage_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -70,7 +79,8 @@ def init_dbs():
             id TEXT PRIMARY KEY,
             user_id TEXT,
             title TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            is_pinned INTEGER DEFAULT 0
         )
     """)
     conn.commit()

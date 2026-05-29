@@ -71,9 +71,10 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = () => {
+        const currentToken = localStorage.getItem('token');
         localStorage.removeItem('token');
         const guestToken = localStorage.getItem('guest_token');
-        if (guestToken) {
+        if (guestToken && currentToken !== guestToken) {
             localStorage.setItem('token', guestToken);
             fetchUser(guestToken);
         } else {

@@ -1,91 +1,22 @@
-import sqlite3
+"""
+init_dbs.py — Initialize unified app.db on startup.
+Delegates to utils/app_db.py which owns the full schema.
+"""
+
+import sys
 import os
 
-DB_DIR = os.path.join(os.path.dirname(__file__), "data")
-USERS_DB = os.path.join(DB_DIR, "users.db")
-INTERACTIONS_DB = os.path.join(DB_DIR, "interactions.db")
+# Ensure backend directory is in the Python path
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
 
 def init_dbs():
-    os.makedirs(DB_DIR, exist_ok=True)
-    
-    # Init Users DB
-    conn = sqlite3.connect(USERS_DB)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            email TEXT PRIMARY KEY,
-            password TEXT,
-            google_id TEXT,
-            full_name TEXT,
-            is_verified INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Add otp_codes table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS otp_codes (
-            email TEXT PRIMARY KEY,
-            code TEXT,
-            type TEXT, -- 'signup' or 'reset'
-            expires_at DATETIME
-        )
-    ''')
-    conn.commit()
-    conn.close()
-    print(f"Initialized {USERS_DB}")
-    
-    # Init Pending Registration DB (for signup staging)
-    conn = sqlite3.connect(USERS_DB)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS pending_users (
-            email TEXT PRIMARY KEY,
-            password TEXT,
-            full_name TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    # Init Guest Usages table
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS guest_usages (
-            guest_id TEXT PRIMARY KEY,
-            usage_count INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
+    from utils.app_db import init_db
+    init_db()
 
-    # Init Interactions DB
-    conn = sqlite3.connect(INTERACTIONS_DB)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS interactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            user_prompt TEXT NOT NULL,
-            web_context TEXT,
-            llm_response TEXT,
-            rating INTEGER DEFAULT 0,
-            source TEXT,
-            sources TEXT,
-            conversation_id TEXT
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS conversations (
-            id TEXT PRIMARY KEY,
-            user_id TEXT,
-            title TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            is_pinned INTEGER DEFAULT 0
-        )
-    """)
-    conn.commit()
-    conn.close()
-    print(f"Initialized {INTERACTIONS_DB}")
 
 if __name__ == "__main__":
     init_dbs()
+    print("Database initialized successfully.")

@@ -1,34 +1,66 @@
-import streamlit as st
-from .state_manager import save_stats
+"""
+logging_utils.py — Structured JSON logging to stdout.
+All events are emitted as single-line JSON for easy ingestion by log aggregators.
+"""
 
-def log_search(query: str, search_type: str, pages_scraped: int):
-    """
-    Logs a search query to session state and updates persistence stats.
-    
-    Input:
-        query (str): The search query.
-        search_type (str): Type of search (e.g., 'Custom Search', 'LLM Search').
-        pages_scraped (int): Number of pages/results found.
-    """
-    st.session_state.search_count += 1
-    st.session_state.pages_scraped_count += pages_scraped
-    # We still add to the in-memory list for immediate updates on the dashboard
-    st.session_state.query_history.insert(0, {"Query": query, "Type": search_type})
-    st.session_state.query_history = st.session_state.query_history[:10]
-    save_stats()
+import json
+import logging
+import sys
+from datetime import datetime
 
-def log_llm_call(provider: str, model: str, prompt_tokens: int = 0, response_tokens: int = 0):
-    """
-    Logs an LLM call to session state and updates persistence stats.
-    
-    Input:
-        provider (str): The LLM provider (e.g., 'Groq').
-        model (str): The specific model used.
-        prompt_tokens (int): Tokens in the prompt.
-        response_tokens (int): Tokens in the response.
-    """
-    st.session_state.llm_call_count += 1
-    st.session_state.llm_provider_usage[provider] = st.session_state.llm_provider_usage.get(provider, 0) + 1
-    st.session_state.llm_model_usage[model] = st.session_state.llm_model_usage.get(model, 0) + 1
-    st.session_state.token_count += prompt_tokens + response_tokens
-    save_stats()
+# Configure root logger to output to stdout with minimal formatting
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(logging.Formatter("%(message)s"))
+
+logger = logging.getLogger("rag_app")
+logger.setLevel(logging.INFO)
+logger.addHandler(_handler)
+logger.propagate = False
+
+
+def _emit(level: str, event: str, **kwargs):
+    record = {
+        "ts": datetime.utcnow().isoformat() + "Z",
+        "level": level,
+        "event": event,
+        **kwargs,
+    }
+    logger.info(json.dumps(record))
+
+
+def log_query(user_id: str, judge_score: float, cache_hit: bool,
+              tokens_in: int, tokens_out: int, latency_ms: int,
+              recommendation: str = "proceed"):
+    _emit(
+        "INFO", "query_processed",
+        user_id=user_id,
+        judge_score=judge_score,
+        cache_hit=cache_hit,
+        recommendation=recommendation,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        latency_ms=latency_ms,
+    )
+
+
+def log_upload(user_id: str, filename: str, chunks: int, latency_ms: int):
+    _emit(
+        "INFO", "document_uploaded",
+        user_id=user_id,
+        filename=filename,
+        chunks_indexed=chunks,
+        latency_ms=latency_ms,
+    )
+
+
+def log_auth(event: str, email: str, success: bool, detail: str = ""):
+    _emit(
+        "INFO" if success else "WARN", event,
+        email=email,
+        success=success,
+        detail=detail,
+    )
+
+
+def log_error(event: str, error: str, **kwargs):
+    _emit("ERROR", event, error=error, **kwargs)

@@ -1,214 +1,258 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from routers.auth import get_current_user
-from models.auth import User
-from models.chat import ChatRequest, ChatResponse, ConversationUpdate
-from utils.retriever_agent import get_retriever_decision, RetrievalStrategy
-from state import vector_store
-from llama_index.llms.groq import Groq
-from llama_index.core.llms import ChatMessage, MessageRole
+"""
+routers/chat.py — 7-Stage RAG Pipeline (/api/v1/chat/*)
+
+Stage 1: Semantic cache check (cosine ≥ 0.92)
+Stage 2: Hybrid BM25 + dense search → RRF top-8
+Stage 3: Cross-encoder rerank → top-3
+Stage 4: LLM-as-judge quality gate (proceed/rerank/reject)
+Stage 5: Groq answer (max_tokens=300, system/user separated)
+Stage 6: Log to SQLite, cache response
+
+Rate limited: 20 requests/minute per IP via slowapi.
+"""
+
 import os
-import sqlite3
-import json
+import time
 import uuid
 from datetime import datetime
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from groq import Groq
 
-router = APIRouter(
-    prefix="/chat",
-    tags=["chat"],
+from routers.auth import get_current_user, UserOut
+from utils.security import sanitize_query
+from utils.semantic_cache import cache_lookup, cache_store
+from utils.hybrid_search import hybrid_search
+from utils.reranker import rerank
+from utils.llm_judge import judge_chunks
+from utils.app_db import (
+    log_interaction, get_recent_chat_turns,
+    create_conversation, get_conversations, get_conversation_messages,
+    update_conversation, delete_conversation, get_conversation_owner,
+    get_guest_uses, increment_guest_uses
 )
+from utils.logging_utils import log_query
+from utils.constants import SYSTEM_PROMPT, GROQ_MODEL, ANSWER_MAX_TOKENS
 
-# Use absolute path for DB (same as auth.py)
-DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "interactions.db"))
+router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
+limiter = Limiter(key_func=get_remote_address)
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+GUEST_LIMIT = 5
+_groq_client: Groq | None = None
 
-def log_interaction_db(user_id, conversation_id, user_prompt, llm_response, source, sources):
-    conn = get_db_connection()
-    c = conn.cursor()
-    sources_json = json.dumps(sources)
-    c.execute(
-        "INSERT INTO interactions (user_prompt, web_context, llm_response, source, sources, conversation_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (user_prompt, "", llm_response, source, sources_json, conversation_id, datetime.now())
-    )
-    conn.commit()
-    conn.close()
 
-def create_conversation_db(user_id, title):
-    conn = get_db_connection()
-    c = conn.cursor()
-    conv_id = str(uuid.uuid4())
-    c.execute("INSERT INTO conversations (id, user_id, title, created_at, is_pinned) VALUES (?, ?, ?, ?, 0)", (conv_id, user_id, title, datetime.now()))
-    conn.commit()
-    conn.close()
-    return conv_id
+def _get_groq() -> Groq:
+    global _groq_client
+    if _groq_client is None:
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise RuntimeError("GROQ_API_KEY not configured")
+        _groq_client = Groq(api_key=api_key)
+    return _groq_client
 
-def get_chat_history(conversation_id):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM interactions WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT 10", (conversation_id,))
-    rows = c.fetchall()
-    conn.close()
-    messages = []
-    for row in reversed(rows):
-        messages.append(ChatMessage(role=MessageRole.USER, content=row["user_prompt"]))
-        messages.append(ChatMessage(role=MessageRole.ASSISTANT, content=row["llm_response"]))
-    return messages
+
+# ── Pydantic models ───────────────────────────────────────────────────────────
+
+class ChatRequest(BaseModel):
+    message: str
+    conversation_id: Optional[str] = None
+    model: Optional[str] = None
+
+
+class ChatResponse(BaseModel):
+    response: str
+    conversation_id: str
+    judge_score: float = 0.0
+    cache_hit: bool = False
+    source: str = "hybrid"
+    chunks_used: int = 0
+
+
+class ConversationUpdate(BaseModel):
+    title: Optional[str] = None
+    is_pinned: Optional[bool] = None
+
+
+# ── Main chat endpoint ────────────────────────────────────────────────────────
 
 @router.post("/", response_model=ChatResponse)
-def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_current_user)):
-    user_id = current_user.email 
-    
-    # Guest Limit Check
-    if user_id.startswith("guest_"):
-        from routers.auth import get_guest_usage, increment_guest_usage
-        count = get_guest_usage(user_id)
-        if count >= 5:
-            raise HTTPException(status_code=403, detail="Demo limit exceeded. Please authenticate.")
-        increment_guest_usage(user_id)
+@limiter.limit("20/minute")
+def chat(
+    request: Request,
+    body: ChatRequest,
+    current_user: UserOut = Depends(get_current_user)
+):
+    t0 = time.time()
+    user_id = current_user.id
 
-    # Check Conversation ID
-    if not request.conversation_id:
-        title = request.message[:30] + "..."
-        request.conversation_id = create_conversation_db(user_id, title)
-    
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured")
+    # Guest limit check
+    if current_user.is_guest:
+        uses = get_guest_uses(user_id)
+        if uses >= GUEST_LIMIT:
+            raise HTTPException(status_code=403, detail="Demo limit reached. Please sign up.")
+        increment_guest_uses(user_id)
 
-    # 1. Decide Strategy (Simple/Manual for now to match reference)
-    context = ""
-    sources = []
-    strategy = "direct"
-    
+    # Ensure conversation exists
+    conv_id = body.conversation_id
+    if not conv_id:
+        conv_id = str(uuid.uuid4())
+        title = body.message[:40].strip() + ("..." if len(body.message) > 40 else "")
+        create_conversation(conv_id, user_id, title)
+
+    # Sanitize user input (prompt injection prevention)
+    clean_query = sanitize_query(body.message)
+
+    # ── Stage 1: Semantic cache ──────────────────────────────────────────────
+    cached = cache_lookup(clean_query)
+    if cached:
+        latency = round((time.time() - t0) * 1000)
+        log_query(user_id, judge_score=1.0, cache_hit=True,
+                  tokens_in=0, tokens_out=0, latency_ms=latency)
+        log_interaction(
+            user_id=user_id, conversation_id=conv_id, query=clean_query,
+            response=cached, chunks=[], judge_score=1.0, recommendation="cache_hit",
+            tokens_in=0, tokens_out=0, latency_ms=latency,
+            cache_hit=True, source="semantic_cache"
+        )
+        return ChatResponse(
+            response=cached,
+            conversation_id=conv_id,
+            judge_score=1.0,
+            cache_hit=True,
+            source="semantic_cache",
+            chunks_used=0,
+        )
+
+    # ── Stage 2: Hybrid BM25 + dense → RRF ──────────────────────────────────
+    hybrid_hits = hybrid_search(clean_query, user_id, top_k=8)
+
+    # ── Stage 3: Cross-encoder rerank ────────────────────────────────────────
+    if hybrid_hits:
+        top_chunks = rerank(clean_query, hybrid_hits, top_k=3)
+    else:
+        top_chunks = []
+
+    # ── Stage 4: LLM judge ───────────────────────────────────────────────────
+    judge_result = {"relevance_score": 0.5, "recommendation": "proceed"}
+    recommendation = "proceed"
+
+    if top_chunks:
+        judge_result = judge_chunks(clean_query, top_chunks)
+        recommendation = judge_result.get("recommendation", "proceed")
+
+        if recommendation == "reject":
+            # No useful context — answer from general knowledge
+            top_chunks = []
+
+    # ── Stage 5: Groq answer ─────────────────────────────────────────────────
+    model = body.model or os.getenv("GROQ_MODEL", GROQ_MODEL)
+    groq = _get_groq()
+
+    # Build context block (never embed in system prompt — always user role)
+    context_block = ""
+    if top_chunks:
+        context_block = "\n\n".join(
+            f"[Source {i+1}]:\n{c['text']}" for i, c in enumerate(top_chunks)
+        )
+
+    # Chat history (last 6 turns)
+    history = get_recent_chat_turns(conv_id, limit=6)
+
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+    ]
+    messages.extend(history)
+
+    user_content = f"Query: {clean_query}"
+    if context_block:
+        user_content += f"\n\nRelevant Document Sections:\n{context_block}"
+
+    messages.append({"role": "user", "content": user_content})
+
     try:
-        docs = vector_store.similarity_search(request.message, k=2)
-        if docs:
-            context_text = "\n\n".join([d.page_content for d in docs])
-            context = f"Context from uploaded documents:\n{context_text}"
-            sources = [{"title": "Document Context", "url": "#"}]
-            strategy = "vector"
-    except Exception:
-        pass # Vector store might be empty or uninitialized
- 
-    # 2. Setup LLM (LlamaIndex Groq)
-    llm = Groq(model=request.model, api_key=api_key, temperature=0.3)
+        completion = groq.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=ANSWER_MAX_TOKENS,
+            temperature=0.3,
+        )
+        response_text = completion.choices[0].message.content.strip()
+        tokens_in = completion.usage.prompt_tokens if completion.usage else 0
+        tokens_out = completion.usage.completion_tokens if completion.usage else 0
+    except Exception as e:
+        raise HTTPException(status_code=503, detail="LLM service temporarily unavailable.")
 
-    # 3. Construct System Prompt
-    reasoning_instruction = (
-        "You are a smart AI assistant. "
-        "Think step-by-step before answering. "
-        "If the user asks for code, explain it clearly in comments. "
-        "If you use context, cite it."
+    # ── Stage 6: Log + cache ─────────────────────────────────────────────────
+    latency = round((time.time() - t0) * 1000)
+    judge_score = judge_result.get("relevance_score", 0.5)
+
+    log_interaction(
+        user_id=user_id, conversation_id=conv_id, query=clean_query,
+        response=response_text,
+        chunks=[c["text"] for c in top_chunks],
+        judge_score=judge_score,
+        recommendation=recommendation,
+        tokens_in=tokens_in, tokens_out=tokens_out,
+        latency_ms=latency, cache_hit=False,
+        source="hybrid" if top_chunks else "direct_llm",
     )
-    
-    base_system = request.system_prompt if request.system_prompt else "You are a helpful assistant."
-    full_system_prompt = f"{base_system}\n\n[INSTRUCTIONS]: {reasoning_instruction}\n\n{context}"
 
-    # 4. Chat History
-    history = get_chat_history(request.conversation_id)
-    
-    # 5. Build Message List
-    messages = [ChatMessage(role=MessageRole.SYSTEM, content=full_system_prompt)] + history + [ChatMessage(role=MessageRole.USER, content=request.message)]
-    
-    # 6. Run
-    response = llm.chat(messages)
-    response_text = response.message.content
-    
-    # 7. Log
-    log_interaction_db(user_id, request.conversation_id, request.message, response_text, strategy, sources)
-    
+    # Cache if judge approved and we have good context
+    if recommendation in ("proceed", "rerank") and judge_score >= 0.85:
+        try:
+            cache_store(clean_query, response_text)
+        except Exception:
+            pass  # Cache failure is non-fatal
+
+    log_query(user_id, judge_score=judge_score, cache_hit=False,
+              tokens_in=tokens_in, tokens_out=tokens_out, latency_ms=latency,
+              recommendation=recommendation)
+
     return ChatResponse(
         response=response_text,
-        conversation_id=request.conversation_id,
-        sources=sources,
-        strategy=strategy
+        conversation_id=conv_id,
+        judge_score=judge_score,
+        cache_hit=False,
+        source="hybrid" if top_chunks else "direct_llm",
+        chunks_used=len(top_chunks),
     )
 
+
+# ── Conversation management endpoints ────────────────────────────────────────
+
 @router.get("/history")
-def get_conversations(current_user: User = Depends(get_current_user)):
-    conn = get_db_connection()
-    c = conn.cursor()
-    # Sort by pinned (DESC) then created_at (DESC)
-    c.execute("SELECT * FROM conversations WHERE user_id = ? ORDER BY is_pinned DESC, created_at DESC", (current_user.email,))
-    rows = c.fetchall()
-    conn.close()
-    
-    conversation_list = []
-    for row in rows:
-        conversation_list.append(dict(row))
-        
-    return conversation_list
+def list_conversations(current_user: UserOut = Depends(get_current_user)):
+    return get_conversations(current_user.id)
 
-@router.put("/conversations/{conversation_id}")
-def update_conversation(conversation_id: str, update: ConversationUpdate, current_user: User = Depends(get_current_user)):
-    conn = get_db_connection()
-    c = conn.cursor()
-    
-    c.execute("SELECT user_id FROM conversations WHERE id = ?", (conversation_id,))
-    conv = c.fetchone()
-    if not conv or conv["user_id"] != current_user.email:
-        raise HTTPException(status_code=403, detail="Not authorized")
-        
-    if update.title is not None:
-        c.execute("UPDATE conversations SET title = ? WHERE id = ?", (update.title, conversation_id))
-    
-    if update.is_pinned is not None:
-        # Toggle pin status or set specific value? Pydantic model usually sends explicit bool/int
-        c.execute("UPDATE conversations SET is_pinned = ? WHERE id = ?", (1 if update.is_pinned else 0, conversation_id))
-        
-    conn.commit()
-    conn.close()
-    return {"message": "Conversation updated"}
-
-@router.delete("/conversations/{conversation_id}")
-def delete_conversation(conversation_id: str, current_user: User = Depends(get_current_user)):
-    conn = get_db_connection()
-    c = conn.cursor()
-    
-    c.execute("SELECT user_id FROM conversations WHERE id = ?", (conversation_id,))
-    conv = c.fetchone()
-    if not conv or conv["user_id"] != current_user.email:
-        raise HTTPException(status_code=403, detail="Not authorized")
-        
-    c.execute("DELETE FROM interactions WHERE conversation_id = ?", (conversation_id,))
-    c.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
-    conn.commit()
-    conn.close()
-    return {"message": "Conversation deleted"}
 
 @router.get("/history/{conversation_id}")
-def get_conversation_messages(conversation_id: str, current_user: User = Depends(get_current_user)):
-    conn = get_db_connection()
-    c = conn.cursor()
-    # Verify ownership
-    c.execute("SELECT user_id FROM conversations WHERE id = ?", (conversation_id,))
-    conv = c.fetchone()
-    
-    if not conv or conv["user_id"] != current_user.email:
-        raise HTTPException(status_code=403, detail="Not authorized")
-        
-    c.execute("SELECT * FROM interactions WHERE conversation_id = ? ORDER BY timestamp ASC", (conversation_id,))
-    rows = c.fetchall()
-    conn.close()
-    
-    formatted_messages = []
-    for row in rows:
-        formatted_messages.append({
-            "role": "user",
-            "content": row["user_prompt"]
-        })
-        
-        sources_list = []
-        if row["sources"]:
-            sources_list = json.loads(row["sources"])
-            
-        formatted_messages.append({
-            "role": "assistant",
-            "content": row["llm_response"],
-            "sources": sources_list
-        })
-        
-    return formatted_messages
+def get_conversation(conversation_id: str, current_user: UserOut = Depends(get_current_user)):
+    owner = get_conversation_owner(conversation_id)
+    if not owner or owner != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized.")
+    return get_conversation_messages(conversation_id)
+
+
+@router.put("/conversations/{conversation_id}")
+def update_conv(
+    conversation_id: str,
+    body: ConversationUpdate,
+    current_user: UserOut = Depends(get_current_user)
+):
+    owner = get_conversation_owner(conversation_id)
+    if not owner or owner != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized.")
+    update_conversation(conversation_id, current_user.id, body.title, body.is_pinned)
+    return {"message": "Updated."}
+
+
+@router.delete("/conversations/{conversation_id}")
+def delete_conv(conversation_id: str, current_user: UserOut = Depends(get_current_user)):
+    owner = get_conversation_owner(conversation_id)
+    if not owner or owner != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized.")
+    delete_conversation(conversation_id, current_user.id)
+    return {"message": "Deleted."}

@@ -241,7 +241,7 @@ const Chat = ({ currentChatId }) => {
     // Load message history from backend
     const loadMessages = async (id) => {
         try {
-            const res = await api.get(`/chat/history/${id}`);
+            const res = await api.get(`/api/v1/chat/history/${id}`);
             let rawData = [];
             if (Array.isArray(res.data)) {
                 rawData = res.data;
@@ -277,9 +277,30 @@ const Chat = ({ currentChatId }) => {
 
             // Nested try-catch for API call specifically
             try {
-                await api.post('/documents/upload', formData);
-                setFile(selectedFile);
+                await api.post('/api/v1/upload', formData);
                 await refreshUser();
+                
+                // Automatically request analysis
+                const autoPrompt = "Please analyze the uploaded document, provide a short summary, and suggest top 3 questions I can ask about it.";
+                const userMsg = {
+                    role: 'user',
+                    content: autoPrompt + `\n[Attached: ${selectedFile.name}]`,
+                    versions: [{ content: autoPrompt, sources: [] }],
+                    currentVersionIndex: 0
+                };
+                
+                // We use function state updater to ensure we have latest messages
+                let currentMsgs = [];
+                setMessages(prev => {
+                    currentMsgs = [...prev, userMsg];
+                    return currentMsgs;
+                });
+                
+                // Need a slight delay to ensure state updates before calling API
+                setTimeout(async () => {
+                    await callChatApi(autoPrompt, selectedFile, currentMsgs);
+                }, 100);
+                
             } catch (uploadError) {
                 console.error("Upload Error:", uploadError);
                 if (uploadError.response?.status === 403) {
@@ -321,7 +342,7 @@ const Chat = ({ currentChatId }) => {
                     system_prompt: systemPrompt
                 };
 
-                const res = await api.post('/chat/', payload);
+                const res = await api.post('/api/v1/chat/', payload);
 
                 const newContent = res.data.response;
                 const newSources = res.data.sources;
@@ -421,7 +442,7 @@ const Chat = ({ currentChatId }) => {
     // Feedback Handler
     const handleFeedback = async (idx, type) => {
         try {
-            await api.post('/feedback/', {
+            await api.post('/api/v1/feedback/', {
                 message_id: currentChatId || 'unknown',
                 type: type,
                 comment: `Feedback for msg index ${idx}`

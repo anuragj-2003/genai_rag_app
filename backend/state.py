@@ -1,4 +1,8 @@
-from utils.vector_store_manager import VectorStoreManager
+"""
+state.py — Application-level singletons.
+ChromaDB manager is initialized lazily on first use.
+"""
+# Re-export chroma_manager for any legacy imports
+from utils import chroma_manager as vector_store
 
-# Global singleton for vector store
-vector_store = VectorStoreManager()
+__all__ = ["vector_store"]

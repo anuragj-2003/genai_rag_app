@@ -4,7 +4,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, User, ArrowRight, Loader2, KeyRound } from 'lucide-react';
 
 const Login = () => {
-    const [mode, setMode] = useState('login'); // login, signup, forgot, verify, reset
+    const location = useLocation();
+    const [mode, setMode] = useState(location.pathname === '/signup' ? 'signup' : (location.state?.mode || 'login')); // login, signup, forgot, verify, reset
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -16,9 +17,8 @@ const Login = () => {
     const [loading, setLoading] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
 
-    const { login, signup, verifyOtp, forgotPassword, resetPassword } = useAuth();
+    const { login, signup, verifyOtp, forgotPassword, resetPassword, startGuestSession } = useAuth();
     const navigate = useNavigate();
-    const location = useLocation();
     const limitExceeded = location.state?.limitExceeded;
 
     const handleAuth = async (e) => {
@@ -30,7 +30,7 @@ const Login = () => {
         try {
             if (mode === 'login') {
                 await login(email, password);
-                navigate('/');
+                navigate('/app');
             } else if (mode === 'signup') {
                 if (password !== confirmPassword) {
                     throw new Error("Passwords do not match");
@@ -82,7 +82,7 @@ const Login = () => {
                     </h1>
                     <p className="text-zinc-500 mt-2 text-sm">
                         {mode === 'login' && 'Enter your credentials to continue'}
-                        {mode === 'signup' && 'Join the GenAI Workspace'}
+                        {mode === 'signup' && 'Join RAGStack'}
                         {mode === 'verify' && 'Enter the code sent to your email'}
                         {mode === 'forgot' && 'Enter your email to receive a code'}
                         {mode === 'reset' && 'Set your new secure password'}
@@ -218,7 +218,7 @@ const Login = () => {
                     {!limitExceeded && (mode === 'login' || mode === 'signup') && (
                         <button
                             type="button"
-                            onClick={() => navigate('/')}
+                            onClick={() => navigate('/guest')}
                             className="w-full mt-3 py-3 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/50 rounded-xl text-sm font-medium text-zinc-400 hover:text-white transition-all duration-200 cursor-pointer flex items-center justify-center gap-2"
                         >
                             Try Demo (Continue as Guest)
@@ -245,7 +245,7 @@ const Login = () => {
                             </div>
                         )}
 
-                        {(mode === 'img' || mode === 'verify' || mode === 'reset' || mode === 'forgot') && (
+                        {(mode === 'verify' || mode === 'reset' || mode === 'forgot') && (
                             <button onClick={() => { setMode('login'); setError(''); }} className="text-zinc-400 hover:text-white transition-colors">Back to Login</button>
                         )}
                     </div>

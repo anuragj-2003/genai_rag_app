@@ -24,7 +24,7 @@ const Sidebar = ({ onNewChat, onSelectChat, currentChatId }) => {
 
     const fetchHistory = async () => {
         try {
-            const res = await api.get('/chat/history');
+            const res = await api.get('/api/v1/chat/history');
             setHistory(res.data);
         } catch (err) {
             console.error("Failed fetching history", err);
@@ -38,7 +38,7 @@ const Sidebar = ({ onNewChat, onSelectChat, currentChatId }) => {
             const newPinned = !chat.is_pinned;
             setHistory(history.map(c => c.id === chat.id ? { ...c, is_pinned: newPinned } : c).sort((a, b) => (b.is_pinned - a.is_pinned)));
 
-            await api.put(`/chat/conversations/${chat.id}`, { is_pinned: newPinned });
+            await api.put(`/api/v1/chat/conversations/${chat.id}`, { is_pinned: newPinned });
             fetchHistory(); // Refresh to ensure sync
         } catch (err) {
             console.error("Failed to pin", err);
@@ -57,7 +57,7 @@ const Sidebar = ({ onNewChat, onSelectChat, currentChatId }) => {
         try {
             setHistory(history.map(c => c.id === id ? { ...c, title: editTitle } : c));
             setEditingId(null);
-            await api.put(`/chat/conversations/${id}`, { title: editTitle });
+            await api.put(`/api/v1/chat/conversations/${id}`, { title: editTitle });
             fetchHistory();
         } catch (err) {
             console.error("Failed to rename", err);
@@ -70,10 +70,10 @@ const Sidebar = ({ onNewChat, onSelectChat, currentChatId }) => {
             setHistory(history.filter(c => c.id !== deleteId));
             if (currentChatId === deleteId) {
                 onNewChat();
-                navigate('/');
+                navigate('/app');
             }
             setDeleteId(null);
-            await api.delete(`/chat/conversations/${deleteId}`);
+            await api.delete(`/api/v1/chat/conversations/${deleteId}`);
         } catch (err) {
             console.error("Failed to delete", err);
             fetchHistory();
@@ -106,7 +106,7 @@ const Sidebar = ({ onNewChat, onSelectChat, currentChatId }) => {
                 {/* New Chat Action */}
                 <div className="p-4">
                     <button
-                        onClick={() => { onNewChat(); navigate('/'); setIsOpen(false); }}
+                        onClick={() => { onNewChat(); navigate('/app'); setIsOpen(false); }}
                         className="w-full group flex items-center justify-center gap-2 bg-white text-black hover:bg-zinc-200 font-semibold py-3 px-4 rounded-xl transition-all shadow-lg active:scale-95"
                     >
                         <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" />
@@ -205,7 +205,7 @@ const Sidebar = ({ onNewChat, onSelectChat, currentChatId }) => {
 
                 {/* User Footer */}
                 <div className="p-4 bg-zinc-900/30 border-t border-zinc-900">
-                    <div className="flex items-center gap-3 mb-4 p-2 rounded-lg hover:bg-zinc-900 transition-colors cursor-pointer" onClick={() => window.location.href = '/settings'}>
+                    <div className="flex items-center gap-3 mb-4 p-2 rounded-lg hover:bg-zinc-900 transition-colors cursor-pointer" onClick={() => navigate('/app/settings')}>
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-900 border border-zinc-700 flex items-center justify-center text-sm font-bold text-white shadow-inner">
                             {user?.full_name ? user.full_name[0].toUpperCase() : 'U'}
                         </div>

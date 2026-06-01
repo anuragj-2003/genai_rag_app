@@ -26,7 +26,7 @@ const Settings = () => {
         if (confirm("Are you sure you want to delete all conversation history? This cannot be undone.")) {
             try {
                 // Mock API call or implement real one
-                await api.delete('/settings/memory');
+                await api.delete('/api/v1/settings/memory');
                 alert("History cleared!");
                 window.location.reload(); // Force sidebar refresh
             } catch (err) {
@@ -37,7 +37,7 @@ const Settings = () => {
 
     const deleteAccount = async () => {
         if (confirm("CRITICAL: Are you sure you want to delete your account? All data will be lost forever.")) {
-            await api.delete('/settings/account');
+            await api.delete('/api/v1/auth/account');
             alert("Account deleted.");
             logout();
         }

@@ -1,25 +1,63 @@
-fastapi
-uvicorn
-python-multipart
-python-jose[cryptography]
-passlib
-requests
-tavily-python
-pandas
-altair
-python-dotenv
-sentence-transformers
-huggingface-hub
-pypdf
-python-docx
-openpyxl
-bcrypt
-llama-index
-llama-index-embeddings-huggingface
-llama-index-llms-groq
-tiktoken
-transformers
-torch
-numpy
-scikit-learn
-scipy
+# ================================================================
+# GenAI RAG App — Backend Requirements
+# ================================================================
+
+# --- Web Framework ---
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+
+# --- Auth / Security ---
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.1.2
+slowapi>=0.1.9
+
+# --- Database ---
+# (SQLite is built-in to Python, no extra package needed)
+
+# --- Vector Store (local, zero API cost) ---
+chromadb>=0.5.0
+
+# --- Embeddings (local, cached) ---
+sentence-transformers>=2.7.0
+
+# --- Cross-Encoder Reranker (local) ---
+# Included in sentence-transformers
+
+# --- LLM ---
+groq>=0.9.0
+
+# --- Document Conversion ---
+markitdown>=0.1.0
+pytesseract>=0.3.10
+PyMuPDF>=1.24.0
+Pillow>=10.3.0
+python-docx>=1.1.0
+openpyxl>=3.1.2
+
+# --- BM25 / Hybrid Search ---
+whoosh>=2.7.4
+rank-bm25>=0.2.2
+
+# --- File Validation ---
+python-magic>=0.4.27
+
+# --- Env + Config ---
+python-dotenv>=1.0.1
+
+# --- Email ---
+# (smtplib is built-in)
+
+# --- Scheduling / Backup ---
+apscheduler>=3.10.4
+boto3>=1.34.0
+
+# --- Monitoring ---
+sentry-sdk[fastapi]>=2.5.0
+
+# --- Utilities ---
+requests>=2.32.0
+numpy>=1.26.0
+scikit-learn>=1.4.0
+scipy>=1.13.0

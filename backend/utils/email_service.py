@@ -1,60 +1,65 @@
+"""
+email_service.py — SMTP email delivery for OTP codes.
+Uses smtplib (stdlib) with TLS. No external library needed.
+"""
+
 import smtplib
-import random
-import string
-import streamlit as st
+import secrets
+import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from dotenv import load_dotenv
 
-def generate_otp(length=6):
-    """Generates a random numeric OTP."""
-    return ''.join(random.choices(string.digits, k=length))
+load_dotenv()
 
-def send_otp_email(to_email, otp):
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+
+
+def generate_otp() -> str:
+    """Generate a 6-digit OTP (cryptographically random)."""
+    return str(secrets.randbelow(1_000_000)).zfill(6)
+
+
+def send_otp_email(to_email: str, otp: str, purpose: str = "verification"):
     """
-    Sends an OTP email to the specified recipient.
+    Send OTP via SMTP with TLS.
+    Raises smtplib.SMTPException on delivery failure.
     """
-    sender_email = st.secrets["auth"].get("email_sender", "d.anuragj2003@gmail.com") # Default/Fallback
-    password = st.secrets["auth"].get("email_password")
-    
-    if not password:
-        return False, "Email password not configured in secrets."
+    subject_map = {
+        "verification": "Your GenAI RAG Verification Code",
+        "reset": "Your GenAI RAG Password Reset Code",
+    }
+    subject = subject_map.get(purpose, "Your Verification Code")
 
-    subject = "🔐 Verify your GenAI Workspace Account"
-    
     html_body = f"""
-    <html>
-        <body style="font-family: Arial, sans-serif; color: #333;">
-            <div style="max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-                <h2 style="color: #4CAF50; text-align: center;">GenAI Workspace Verification</h2>
-                <hr style="border: 0; border-top: 1px solid #eee;">
-                <p>Hello,</p>
-                <p>Thank you for signing up! Please use the following One-Time Password (OTP) to verify your email address and complete your registration.</p>
-                
-                <div style="background-color: #f9f9f9; padding: 15px; text-align: center; border-radius: 5px; margin: 20px 0;">
-                    <span style="font-size: 24px; font-weight: bold; letter-spacing: 5px; color: #333;">{otp}</span>
-                </div>
-                
-                <p>This code will expire in 10 minutes.</p>
-                <p>If you didn't request this, you can safely ignore this email.</p>
-                
-                <br>
-                <p style="font-size: 12px; color: #888;">Best regards,<br>The GenAI Workspace Team</p>
-            </div>
-        </body>
-    </html>
+    <html><body style="font-family:sans-serif;max-width:480px;margin:auto;padding:24px">
+      <h2 style="color:#6366f1">GenAI RAG App</h2>
+      <p>Your {purpose} code is:</p>
+      <div style="font-size:36px;font-weight:bold;letter-spacing:8px;
+                  background:#f1f5f9;padding:16px;border-radius:8px;
+                  text-align:center;color:#1e293b">{otp}</div>
+      <p style="color:#64748b;font-size:13px;margin-top:16px">
+        This code expires in <strong>10 minutes</strong>.<br>
+        Never share this code with anyone.
+      </p>
+    </body></html>
     """
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = sender_email
+    msg["From"] = SMTP_USER
     msg["To"] = to_email
     msg.attach(MIMEText(html_body, "html"))
 
     try:
-        # Connect to Gmail SMTP
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(sender_email, password)
-            server.send_message(msg)
-        return True, "Email sent successfully"
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_USER, to_email, msg.as_string())
     except Exception as e:
-        return False, str(e)
+        print(f"[Email] Failed to send OTP to {to_email}: {e}")
+        raise

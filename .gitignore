@@ -7,10 +7,36 @@ frontend/*.local
 # Backend
 __pycache__/
 *.pyc
+*.pyo
 .venv/
+myenv/
+venv/
+env/
+
+# Environment — NEVER commit real .env files
 .env
+.env.*
+*.env
+backend/.env
+backend/.env.*
 
 # Database
 *.db
-backend/data/*.db
+backend/data/
 data/
+
+# ChromaDB local index
+chroma_db/
+backend/chroma_db/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

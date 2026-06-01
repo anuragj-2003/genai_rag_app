@@ -1,4 +1,4 @@
-# AI Workspace
+# RAG App
 
 A modern, full-stack AI-powered search and research assistant. Built with **React (Vite + Tailwind CSS)** on the frontend and **FastAPI** on the backend. It features document interaction and query routing decision agents.
 
